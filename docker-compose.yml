@@ -1,0 +1,82 @@
+# Fleet Server — оркестрація сервісів
+# Назовні відкритий ТІЛЬКИ nginx (80/443) та wireguard (51820/udp)
+# Всі інші порти — тільки 127.0.0.1
+
+services:
+
+  postgres:
+    image: postgres:16
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"    # ← тільки localhost, НЕ "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"    # ← тільки localhost, nginx проксує
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  sync:
+    build: ./sync
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Немає портів — тільки вихідні з'єднання до авто через VPN
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    env_file: .env
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3000:3000"    # ← тільки localhost, nginx проксує
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro    # SSL сертифікати (Let's Encrypt)
+    ports:
+      - "0.0.0.0:80:80"      # ← публічний, редірект на HTTPS
+      - "0.0.0.0:443:443"    # ← публічний, єдина точка входу
+    depends_on:
+      - api
+      - grafana
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  grafana_data:
