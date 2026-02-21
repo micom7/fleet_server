@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Fleet{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { fleet: { DEFAULT: '#1e3a5f' } } } }
+    }
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+
+{% if user %}
+<nav class="bg-slate-900 text-white shadow-lg">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-8">
+      <a href="/fleet" class="text-xl font-bold tracking-tight flex items-center gap-2">
+        <span>🚛</span> Fleet
+      </a>
+      <div class="flex items-center gap-6 text-sm">
+        <a href="/fleet"
+           class="hover:text-blue-300 transition-colors {% if active == 'fleet' %}text-blue-300 font-medium{% else %}text-gray-300{% endif %}">
+          Автопарк
+        </a>
+        {% if user.role == 'superuser' %}
+        <a href="/admin"
+           class="hover:text-blue-300 transition-colors {% if active == 'admin' %}text-blue-300 font-medium{% else %}text-gray-300{% endif %}">
+          Адмін
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="flex items-center gap-4 text-sm">
+      <span class="text-gray-400">{{ user.full_name or user.email }}</span>
+      {% if user.role == 'superuser' %}
+      <span class="bg-red-700 text-red-100 text-xs px-2 py-0.5 rounded-full">superuser</span>
+      {% endif %}
+      <a href="/logout" class="text-gray-400 hover:text-red-400 transition-colors">Вийти</a>
+    </div>
+  </div>
+</nav>
+{% endif %}
+
+<main class="max-w-7xl mx-auto px-4 py-6">
+  {% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

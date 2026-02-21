@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}{{ vehicle.name }}{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="flex items-center gap-3 mb-6">
+  <a href="/fleet" class="text-gray-400 hover:text-gray-600 text-sm">← Автопарк</a>
+  <span class="text-gray-300">/</span>
+  <h1 class="text-2xl font-bold text-gray-800">{{ vehicle.name }}</h1>
+  {% if vehicle.online %}
+  <span class="flex items-center gap-1.5 bg-green-100 text-green-700 text-xs px-2.5 py-1 rounded-full font-medium">
+    <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Online
+  </span>
+  {% else %}
+  <span class="flex items-center gap-1.5 bg-red-50 text-red-600 text-xs px-2.5 py-1 rounded-full font-medium">
+    <span class="w-1.5 h-1.5 bg-red-400 rounded-full"></span> Offline
+  </span>
+  {% endif %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- Left column: info + alarms + live -->
+  <div class="lg:col-span-1 space-y-4">
+
+    <!-- Vehicle info -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Інформація</h2>
+      <dl class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <dt class="text-gray-500">VPN IP</dt>
+          <dd class="font-mono text-gray-800">{{ vehicle.vpn_ip }}</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-gray-500">API порт</dt>
+          <dd class="font-mono text-gray-800">{{ vehicle.api_port }}</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-gray-500">Остання активність</dt>
+          <dd class="text-gray-800">
+            {% if vehicle.last_seen_at %}
+              {{ vehicle.last_seen_at.strftime('%d.%m %H:%M') }}
+            {% else %}
+              <span class="text-gray-400">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-gray-500">Sync</dt>
+          <dd>
+            {% if vehicle.sync_status == 'ok' %}
+            <span class="text-green-600">✓ ok</span>
+            {% elif vehicle.sync_status == 'error' %}
+            <span class="text-red-500">✗ error</span>
+            {% elif vehicle.sync_status == 'timeout' %}
+            <span class="text-yellow-600">⏱ timeout</span>
+            {% else %}
+            <span class="text-gray-400">{{ vehicle.sync_status }}</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Active alarms -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Тривоги</h2>
+        <button class="text-xs text-blue-500 hover:text-blue-700"
+                hx-get="/partials/vehicles/{{ vehicle.id }}/alarms"
+                hx-target="#alarms-list"
+                hx-swap="innerHTML">
+          Оновити
+        </button>
+      </div>
+      <div id="alarms-list">
+        {% include "partials/alarms.html" %}
+      </div>
+    </div>
+
+    <!-- Live control -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Live перегляд</h2>
+      <button id="live-btn"
+              onclick="toggleLive('{{ vehicle.id }}')"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+                     py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
+        <span id="live-icon">▶</span>
+        <span id="live-text">Запустити Live</span>
+      </button>
+      <div id="live-status" class="mt-2 text-xs text-gray-400 text-center hidden"></div>
+    </div>
+
+  </div>
+
+  <!-- Right column: live data -->
+  <div class="lg:col-span-2">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 min-h-64">
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Дані в реальному часі</h2>
+
+      <div id="live-offline" class="text-center py-12 text-gray-400">
+        <div class="text-3xl mb-2">📡</div>
+        <p class="text-sm">Натисніть «Запустити Live» для отримання даних</p>
+      </div>
+
+      <div id="live-data" class="hidden">
+        <div id="live-channels" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+        <div class="mt-3 text-xs text-gray-400 text-right" id="live-updated"></div>
+      </div>
+
+      <div id="live-vehicle-offline" class="hidden text-center py-12">
+        <div class="text-3xl mb-2">📵</div>
+        <p class="text-sm text-red-500">Авто недоступне</p>
+        <p class="text-xs text-gray-400 mt-1">Спроба перепідключення...</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let ws = null;
+let isLive = false;
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+function toggleLive(vehicleId) {
+  if (isLive) {
+    stopLive();
+  } else {
+    startLive(vehicleId);
+  }
+}
+
+function startLive(vehicleId) {
+  const token = getCookie('access_token');
+  if (!token) {
+    window.location.href = '/login';
+    return;
+  }
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/ws/vehicles/${vehicleId}/live?token=${token}`;
+
+  ws = new WebSocket(url);
+  isLive = true;
+  updateBtn(true);
+
+  document.getElementById('live-offline').classList.add('hidden');
+  document.getElementById('live-vehicle-offline').classList.add('hidden');
+  document.getElementById('live-data').classList.remove('hidden');
+
+  ws.onmessage = function(event) {
+    const msg = JSON.parse(event.data);
+    if (msg.status === 'offline') {
+      document.getElementById('live-data').classList.add('hidden');
+      document.getElementById('live-vehicle-offline').classList.remove('hidden');
+      return;
+    }
+    document.getElementById('live-vehicle-offline').classList.add('hidden');
+    document.getElementById('live-data').classList.remove('hidden');
+
+    const channels = msg.data || [];
+    const container = document.getElementById('live-channels');
+    container.innerHTML = '';
+    channels.forEach(ch => {
+      const div = document.createElement('div');
+      div.className = 'bg-gray-50 rounded-lg p-3 border border-gray-100';
+      div.innerHTML = `
+        <div class="text-xs text-gray-500 truncate">${ch.channel_id ?? ''}</div>
+        <div class="text-lg font-bold text-gray-800 mt-0.5">
+          ${ch.value !== undefined ? ch.value : '—'}
+          ${ch.unit ? `<span class="text-sm font-normal text-gray-500">${ch.unit}</span>` : ''}
+        </div>`;
+      container.appendChild(div);
+    });
+
+    const now = new Date();
+    document.getElementById('live-updated').textContent =
+      `Оновлено: ${now.toLocaleTimeString('uk-UA')}`;
+    document.getElementById('live-status').textContent = '● Live';
+    document.getElementById('live-status').className = 'mt-2 text-xs text-green-500 text-center';
+    document.getElementById('live-status').classList.remove('hidden');
+  };
+
+  ws.onerror = ws.onclose = function() {
+    if (isLive) {
+      document.getElementById('live-status').textContent = 'Відключено';
+      document.getElementById('live-status').className = 'mt-2 text-xs text-red-400 text-center';
+    }
+  };
+}
+
+function stopLive() {
+  if (ws) { ws.close(); ws = null; }
+  isLive = false;
+  updateBtn(false);
+  document.getElementById('live-data').classList.add('hidden');
+  document.getElementById('live-vehicle-offline').classList.add('hidden');
+  document.getElementById('live-offline').classList.remove('hidden');
+  document.getElementById('live-status').classList.add('hidden');
+}
+
+function updateBtn(active) {
+  document.getElementById('live-icon').textContent = active ? '■' : '▶';
+  document.getElementById('live-text').textContent = active ? 'Зупинити Live' : 'Запустити Live';
+  document.getElementById('live-btn').className = active
+    ? 'w-full bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2'
+    : 'w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2';
+}
+</script>
+{% endblock %}

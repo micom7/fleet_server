@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if show_register %}Реєстрація{% else %}Вхід{% endif %} — Fleet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 min-h-screen flex items-center justify-center">
+
+<div class="w-full max-w-md px-4">
+  <!-- Logo -->
+  <div class="text-center mb-8">
+    <div class="text-5xl mb-3">🚛</div>
+    <h1 class="text-3xl font-bold text-white">Fleet Server</h1>
+    <p class="text-slate-400 mt-1 text-sm">Система моніторингу автопарку</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex bg-slate-800 rounded-t-xl overflow-hidden">
+    <a href="/login"
+       class="flex-1 py-3 text-center text-sm font-medium transition-colors
+              {% if not show_register %}bg-white text-slate-900{% else %}text-slate-400 hover:text-white{% endif %}">
+      Вхід
+    </a>
+    <a href="/register"
+       class="flex-1 py-3 text-center text-sm font-medium transition-colors
+              {% if show_register %}bg-white text-slate-900{% else %}text-slate-400 hover:text-white{% endif %}">
+      Реєстрація
+    </a>
+  </div>
+
+  <!-- Card -->
+  <div class="bg-white rounded-b-xl shadow-2xl p-8">
+
+    {% if error %}
+    <div class="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+      {{ error }}
+    </div>
+    {% endif %}
+
+    {% if msg %}
+    <div class="mb-4 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-lg px-4 py-3">
+      {{ msg }}
+    </div>
+    {% endif %}
+
+    {% if not show_register %}
+    <!-- LOGIN FORM -->
+    <form method="post" action="/login" class="space-y-5">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <input type="email" name="email" required autofocus
+               class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+               placeholder="your@email.com">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
+        <input type="password" name="password" required
+               class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+      </div>
+      <button type="submit"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg
+                     transition-colors text-sm">
+        Увійти
+      </button>
+    </form>
+
+    {% else %}
+    <!-- REGISTER FORM -->
+    <form method="post" action="/register" class="space-y-5">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <input type="email" name="email" required autofocus
+               class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+               placeholder="your@email.com">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Повне ім'я</label>
+        <input type="text" name="full_name"
+               class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+               placeholder="Іван Петренко">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
+        <input type="password" name="password" required minlength="8"
+               class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+               placeholder="мінімум 8 символів">
+      </div>
+      <button type="submit"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg
+                     transition-colors text-sm">
+        Зареєструватись
+      </button>
+      <p class="text-xs text-gray-500 text-center">
+        Після реєстрації акаунт буде активовано адміністратором.
+      </p>
+    </form>
+    {% endif %}
+
+  </div>
+</div>
+
+</body>
+</html>

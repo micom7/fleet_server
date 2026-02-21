@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(python -c:*)",
+      "Bash(HASH='$2b$12$nuSNDlbccvJhAaSbbtnAUOErYImHVuRaUPMIy/VguaAvSIU1Ei6T.')"
+    ]
+  }
+}

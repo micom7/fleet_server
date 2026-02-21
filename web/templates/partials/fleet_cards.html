@@ -1,0 +1,38 @@
+{% for v in vehicles %}
+<a href="/vehicles/{{ v.id }}"
+   class="bg-white rounded-xl shadow-sm border border-gray-200 p-5
+          hover:shadow-md hover:border-blue-200 transition-all block group">
+  <div class="flex items-start justify-between">
+    <div class="flex-1 min-w-0">
+      <h3 class="font-semibold text-gray-800 group-hover:text-blue-700 truncate">
+        {{ v.name }}
+      </h3>
+      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ v.vpn_ip }}</p>
+    </div>
+    {% if v.online %}
+    <span class="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs px-2.5 py-1 rounded-full font-medium shrink-0">
+      <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+      Online
+    </span>
+    {% else %}
+    <span class="flex items-center gap-1.5 bg-gray-100 text-gray-500 text-xs px-2.5 py-1 rounded-full font-medium shrink-0">
+      <span class="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
+      Offline
+    </span>
+    {% endif %}
+  </div>
+
+  <div class="mt-4 flex items-center justify-between text-xs text-gray-400">
+    <span>
+      {% if v.last_seen_at %}
+        Активність: {{ v.last_seen_at.strftime('%d.%m %H:%M') }}
+      {% else %}
+        Ще не з'єднувалось
+      {% endif %}
+    </span>
+    <span class="{% if v.sync_status == 'ok' %}text-green-500{% elif v.sync_status in ['error', 'timeout'] %}text-red-400{% endif %}">
+      sync: {{ v.sync_status }}
+    </span>
+  </div>
+</a>
+{% endfor %}

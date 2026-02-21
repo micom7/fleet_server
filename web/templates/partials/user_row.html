@@ -1,0 +1,64 @@
+<tr id="user-{{ u.id }}" class="hover:bg-gray-50">
+  <td class="px-4 py-3">
+    <div class="font-medium text-gray-800 text-sm">{{ u.email }}</div>
+    {% if u.full_name %}
+    <div class="text-xs text-gray-400">{{ u.full_name }}</div>
+    {% endif %}
+  </td>
+  <td class="px-4 py-3">
+    {% if u.role == 'superuser' %}
+    <span class="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">superuser</span>
+    {% else %}
+    <span class="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">owner</span>
+    {% endif %}
+  </td>
+  <td class="px-4 py-3">
+    {% if u.status == 'active' %}
+    <span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">active</span>
+    {% elif u.status == 'pending' %}
+    <span class="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full">pending</span>
+    {% elif u.status == 'blocked' %}
+    <span class="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">blocked</span>
+    {% endif %}
+  </td>
+  <td class="px-4 py-3 text-xs text-gray-400">
+    {{ u.created_at.strftime('%d.%m.%Y') }}
+  </td>
+  <td class="px-4 py-3">
+    <div class="flex items-center gap-2" id="actions-{{ u.id }}">
+      {% set is_self = (cu.id | string) == (u.id | string) %}
+
+      {% if u.status == 'pending' %}
+      <button hx-post="/web/admin/users/{{ u.id }}/approve"
+              hx-target="#user-{{ u.id }}"
+              hx-swap="outerHTML"
+              class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded transition-colors">
+        Підтвердити
+      </button>
+      <button hx-post="/web/admin/users/{{ u.id }}/block"
+              hx-target="#user-{{ u.id }}"
+              hx-swap="outerHTML"
+              class="text-xs bg-gray-200 hover:bg-red-100 hover:text-red-600 text-gray-600 px-3 py-1 rounded transition-colors">
+        Відхилити
+      </button>
+
+      {% elif u.status == 'active' and not is_self %}
+      <button hx-post="/web/admin/users/{{ u.id }}/block"
+              hx-target="#user-{{ u.id }}"
+              hx-swap="outerHTML"
+              hx-confirm="Заблокувати {{ u.email }}?"
+              class="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors">
+        Блокувати
+      </button>
+
+      {% elif u.status == 'blocked' and not is_self %}
+      <button hx-post="/web/admin/users/{{ u.id }}/unblock"
+              hx-target="#user-{{ u.id }}"
+              hx-swap="outerHTML"
+              class="text-xs text-green-600 hover:text-green-800 px-2 py-1 rounded hover:bg-green-50 transition-colors">
+        Розблокувати
+      </button>
+      {% endif %}
+    </div>
+  </td>
+</tr>

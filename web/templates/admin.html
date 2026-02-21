@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Адмін{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold text-gray-800">Адмін-панель</h1>
+</div>
+
+<!-- Tabs -->
+<div class="flex gap-1 bg-gray-200 p-1 rounded-lg w-fit mb-6">
+  <a href="/admin?tab=users"
+     class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors
+            {% if tab == 'users' %}bg-white shadow text-gray-800{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+    Користувачі
+    {% set pending_count = users | selectattr('status', 'equalto', 'pending') | list | length %}
+    {% if pending_count > 0 %}
+    <span class="ml-1.5 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{{ pending_count }}</span>
+    {% endif %}
+  </a>
+  <a href="/admin?tab=vehicles"
+     class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors
+            {% if tab == 'vehicles' %}bg-white shadow text-gray-800{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+    Авто
+  </a>
+</div>
+
+<!-- ── USERS TAB ── -->
+{% if tab == 'users' %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 border-b border-gray-200">
+      <tr>
+        <th class="text-left px-4 py-3 font-medium text-gray-500">Email / Ім'я</th>
+        <th class="text-left px-4 py-3 font-medium text-gray-500">Роль</th>
+        <th class="text-left px-4 py-3 font-medium text-gray-500">Статус</th>
+        <th class="text-left px-4 py-3 font-medium text-gray-500">Зареєстровано</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody id="users-table" class="divide-y divide-gray-100">
+      {% for u in users %}
+      {% include "partials/user_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ── VEHICLES TAB ── -->
+{% else %}
+<div class="space-y-6">
+
+  <!-- Vehicles list -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+      <h2 class="font-semibold text-gray-700">Список авто</h2>
+    </div>
+    {% if not vehicles %}
+    <div class="p-8 text-center text-gray-400 text-sm">Авто не додані</div>
+    {% else %}
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-100">
+        <tr>
+          <th class="text-left px-4 py-3 font-medium text-gray-500">Назва</th>
+          <th class="text-left px-4 py-3 font-medium text-gray-500">VPN IP</th>
+          <th class="text-left px-4 py-3 font-medium text-gray-500">Синхронізація</th>
+          <th class="text-left px-4 py-3 font-medium text-gray-500">Власники</th>
+          <th class="text-left px-4 py-3 font-medium text-gray-500">Призначити</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for v in vehicles %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 font-medium text-gray-800">
+            <a href="/vehicles/{{ v.id }}" class="hover:text-blue-600">{{ v.name }}</a>
+          </td>
+          <td class="px-4 py-3 font-mono text-gray-600 text-xs">{{ v.vpn_ip }}</td>
+          <td class="px-4 py-3">
+            {% if v.sync_status == 'ok' %}
+            <span class="text-green-600 text-xs">✓ ok</span>
+            {% elif v.sync_status == 'error' %}
+            <span class="text-red-500 text-xs">✗ error</span>
+            {% elif v.sync_status == 'timeout' %}
+            <span class="text-yellow-600 text-xs">⏱ timeout</span>
+            {% else %}
+            <span class="text-gray-400 text-xs">{{ v.sync_status }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3">
+            {% set vid = v.id | string %}
+            {% if vid in access_map %}
+              {% for uid in access_map[vid] %}
+                {% for u in active_owners if u.id | string == uid %}
+                <span class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full mr-1">
+                  {{ u.email }}
+                  <button hx-delete="/web/admin/vehicles/{{ vid }}/assign/{{ uid }}"
+                          hx-target="closest span"
+                          hx-swap="outerHTML"
+                          class="text-blue-400 hover:text-red-500 ml-0.5"
+                          title="Видалити">×</button>
+                </span>
+                {% endfor %}
+              {% endfor %}
+            {% else %}
+            <span class="text-gray-400 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3">
+            <form hx-post="/web/admin/vehicles/{{ v.id }}/assign"
+                  hx-target="closest td"
+                  hx-swap="innerHTML"
+                  class="flex gap-2 items-center">
+              <select name="user_id"
+                      class="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="">— обрати —</option>
+                {% for u in active_owners %}
+                <option value="{{ u.id }}">{{ u.email }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit"
+                      class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded transition-colors">
+                Призначити
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <!-- Add vehicle form -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+    <h2 class="font-semibold text-gray-700 mb-4">Додати авто</h2>
+    <form method="post" action="/admin/vehicles" class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Назва</label>
+        <input type="text" name="name" required placeholder="Авто 1"
+               class="border border-gray-300 rounded-lg px-3 py-2 text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">VPN IP</label>
+        <input type="text" name="vpn_ip" required placeholder="10.0.0.11"
+               class="border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono
+                      focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">API порт</label>
+        <input type="number" name="api_port" value="8080"
+               class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-24
+                      focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <button type="submit"
+              class="bg-green-600 hover:bg-green-700 text-white text-sm font-medium
+                     px-4 py-2 rounded-lg transition-colors">
+        + Додати
+      </button>
+    </form>
+  </div>
+
+</div>
+{% endif %}
+{% endblock %}
