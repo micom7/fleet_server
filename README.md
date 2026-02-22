@@ -21,12 +21,3 @@ auto_fleet/
 | [fleet_server/](fleet_server/) | Серверна частина: FastAPI, Sync Service, PostgreSQL, Web UI |
 | [auto_telemetry/](auto_telemetry/) | Бортове ПЗ: Collector, Outbound API, Portal, Agent |
 
-## Деплой
-
-```bash
-# На VPS — тільки fleet_server/
-git sparse-checkout set fleet_server DATA_CONTRACT.md
-
-# На RUTX11 — тільки auto_telemetry/
-git sparse-checkout set auto_telemetry DATA_CONTRACT.md
-```

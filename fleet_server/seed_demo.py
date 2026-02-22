@@ -29,6 +29,8 @@ def main():
 
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # RLS потребує ролі superuser для INSERT/SELECT
+            cur.execute("SET LOCAL app.user_role = 'superuser'")
 
             # Demo user
             cur.execute("SELECT id FROM users WHERE email = %s", (DEMO_EMAIL,))
