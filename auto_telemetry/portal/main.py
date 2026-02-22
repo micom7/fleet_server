@@ -1,13 +1,17 @@
 """
 Portal — операторський інтерфейс.
 
-Запуск: uvicorn portal.main:app --reload --port 8000
+Запуск: uvicorn portal.main:app --reload --port 8100
 """
 
 import asyncio
 import json
 import os
+import sys
 from contextlib import asynccontextmanager
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import psycopg2
 import zmq.asyncio

@@ -19,7 +19,7 @@ from portal.main import app
 
 
 def start_server() -> None:
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=8100, log_level="warning")
 
 
 def wait_for_server(url: str, timeout: float = 10.0) -> bool:
@@ -37,13 +37,13 @@ if __name__ == "__main__":
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
 
-    if not wait_for_server("http://127.0.0.1:8000"):
+    if not wait_for_server("http://127.0.0.1:8100"):
         print("Помилка: сервер не запустився")
         raise SystemExit(1)
 
     window = webview.create_window(
         title="Telemetry Portal",
-        url="http://127.0.0.1:8000",
+        url="http://127.0.0.1:8100",
         width=1280,
         height=800,
         min_size=(800, 500),

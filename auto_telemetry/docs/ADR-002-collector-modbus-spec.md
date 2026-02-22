@@ -2,7 +2,7 @@
 
 **Статус:** Прийнято
 **Дата:** 2026-02-18
-**Джерела:** `docs/et7017_register_table.pdf`, `docs/et724_register_table.pdf`
+**Джерела:** `docs/et7017_register_table.pdf`, `docs/et7284_register_table.pdf`
 
 ---
 
