@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Telemetry Portal</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #111;
+            color: #eee;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #status {
+            font-size: 12px;
+            padding: 3px 10px;
+            border-radius: 10px;
+            background: #333;
+            color: #888;
+        }
+
+        #status.live { background: #1a3a1a; color: #4caf50; }
+        #status.offline { background: #3a1a1a; color: #f44336; }
+
+        nav {
+            display: flex;
+            align-items: center;
+            background: #16213e;
+            flex-shrink: 0;
+        }
+
+        #nav-brand {
+            margin-left: auto;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        nav button {
+            padding: 16px 32px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: #aaa;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        nav button:hover { color: #fff; }
+        nav button.active { color: #fff; border-bottom-color: #4a9eff; }
+
+        .tab { display: none; flex: 1; overflow: hidden; }
+        .tab.active { display: flex; }
+
+        /* ── Головна ── */
+        #tab-home {
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 32px;
+        }
+
+        #home-title {
+            font-size: 22px;
+            color: #aaa;
+            letter-spacing: 2px;
+        }
+
+        #home-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+        }
+
+        .home-btn {
+            padding: 18px 40px;
+            background: #16213e;
+            border: 1px solid #2a3a5e;
+            border-radius: 8px;
+            color: #eee;
+            font-size: 17px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            min-width: 160px;
+        }
+
+        .home-btn:hover {
+            background: #1e2f5e;
+            border-color: #4a9eff;
+            color: #4a9eff;
+        }
+
+        /* ── Монітор ── */
+        #tab-monitor { overflow-y: auto; padding: 16px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            text-align: left;
+            padding: 8px 12px;
+            background: #1a1a2e;
+            color: #888;
+            font-weight: normal;
+            position: sticky;
+            top: 0;
+        }
+
+        td { padding: 8px 12px; border-bottom: 1px solid #1e1e1e; }
+
+        tr:hover td { background: #1a1a2e; }
+
+        .val { font-family: monospace; font-size: 16px; color: #4a9eff; }
+        .val.null { color: #555; }
+        .unit { color: #888; font-size: 12px; }
+        .ch-id { color: #555; font-size: 12px; }
+
+        /* ── Графіки ── */
+        #tab-charts iframe { width: 100%; height: 100%; border: none; }
+
+        /* ── Параметри ── */
+        #tab-params { flex-direction: column; }
+
+        #params-back-bar {
+            display: none;
+            flex-shrink: 0;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: #16213e;
+            border-bottom: 1px solid #2a3a5e;
+        }
+
+        #params-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #params-buttons {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            padding: 16px;
+            overflow-y: auto;
+            align-content: start;
+            box-sizing: border-box;
+        }
+
+        .param-btn {
+            padding: 18px 22px;
+            background: #16213e;
+            border: 1px solid #2a3a5e;
+            border-radius: 8px;
+            color: #eee;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: left;
+            transition: border-color 0.15s, background 0.15s;
+            min-height: 60px;
+        }
+
+        .param-btn:hover {
+            background: #1e2f5e;
+            border-color: #4a9eff;
+        }
+
+        .param-btn-unit {
+            color: #666;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        #params-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+        }
+
+        /* ── Конфіги ── */
+        #tab-configs { overflow-y: auto; padding: 16px; display: none; flex-direction: column; gap: 12px; }
+        #tab-configs.active { display: flex; }
+
+        #cfg-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+        #cfg-table th {
+            text-align: left; padding: 12px 12px;
+            background: #1a1a2e; color: #888; font-weight: normal;
+            position: sticky; top: 0;
+        }
+        #cfg-table td { padding: 10px 12px; border-bottom: 1px solid #1e1e1e; vertical-align: middle; }
+        #cfg-table tr:hover td { background: #1a1a2e; }
+
+        #cfg-table input[type=text] {
+            background: #222; border: 1px solid #444; color: #eee;
+            padding: 10px 12px; border-radius: 6px; width: 140px; font-size: 15px;
+        }
+
+        .num-field {
+            background: #222; border: 1px solid #444; border-radius: 6px;
+            color: #4a9eff; padding: 10px 12px; font-size: 15px;
+            font-family: monospace; cursor: pointer; min-width: 90px;
+            text-align: right; display: block;
+        }
+        .num-field:hover { border-color: #4a9eff; }
+
+        .toggle-btn {
+            padding: 10px 20px; border: 1px solid #444; border-radius: 6px;
+            background: #2a2a2a; color: #888; font-size: 15px; cursor: pointer;
+            min-width: 90px;
+        }
+        .toggle-btn.on { background: #1a3a1a; color: #4caf50; border-color: #2a5a2a; }
+
+        /* ── Цифрова клавіатура ── */
+        #keypad-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+            display: none; align-items: center; justify-content: center; z-index: 1000;
+        }
+        #keypad-overlay.open { display: flex; }
+
+        #keypad {
+            background: #1a1a2e; border: 1px solid #2a3a5e;
+            border-radius: 12px; padding: 20px; width: 340px;
+        }
+
+        #kp-label {
+            color: #888; font-size: 13px; margin-bottom: 6px; text-align: center;
+        }
+
+        #kp-display {
+            background: #111; border: 1px solid #333; border-radius: 6px;
+            padding: 12px 16px; font-size: 26px; font-family: monospace;
+            color: #4a9eff; text-align: right; margin-bottom: 14px; min-height: 54px;
+        }
+
+        #kp-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px;
+        }
+
+        .kp-btn {
+            height: 68px; background: #16213e; border: 1px solid #2a3a5e;
+            border-radius: 8px; color: #eee; font-size: 22px; cursor: pointer;
+        }
+        .kp-btn:active { background: #1e2f5e; }
+        .kp-btn-wide { grid-column: span 2; }
+        .kp-btn-ok { background: #1a3a1a; color: #4caf50; border-color: #2a5a2a; }
+        .kp-btn-fn { color: #aaa; font-size: 18px; }
+        #kp-cancel {
+            width: 100%; padding: 14px; background: #2a2a2a; border: none;
+            border-radius: 8px; color: #888; font-size: 16px; cursor: pointer; margin-top: 8px;
+        }
+
+        /* ── Текстове поле ── */
+        .txt-field {
+            background: #222; border: 1px solid #444; border-radius: 6px;
+            color: #eee; padding: 10px 12px; font-size: 15px;
+            cursor: pointer; min-width: 140px; max-width: 200px;
+            text-align: left; display: block;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .txt-field:hover { border-color: #4a9eff; }
+
+        /* ── Віртуальна клавіатура ── */
+        #kbd-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            display: none; align-items: flex-end; justify-content: center; z-index: 1001;
+        }
+        #kbd-overlay.open { display: flex; }
+
+        #kbd {
+            background: #1a1a2e; border-top: 1px solid #2a3a5e;
+            width: 100%; padding: 10px 12px 16px;
+        }
+
+        #kbd-header {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+        }
+
+        #kbd-label { color: #888; font-size: 13px; white-space: nowrap; }
+
+        #kbd-display {
+            flex: 1; background: #111; border: 1px solid #333; border-radius: 6px;
+            padding: 8px 12px; font-size: 17px; color: #eee; min-height: 40px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        #kbd-layout-tabs {
+            display: flex; gap: 6px; margin-bottom: 8px;
+        }
+        .kbd-tab {
+            padding: 8px 16px; background: #16213e; border: 1px solid #2a3a5e;
+            border-radius: 6px; color: #888; font-size: 13px; cursor: pointer;
+        }
+        .kbd-tab.active { color: #4a9eff; border-color: #4a9eff; }
+
+        .kbd-row {
+            display: flex; justify-content: center; gap: 5px; margin-bottom: 5px;
+        }
+        .kbd-key {
+            height: 58px; min-width: 44px; flex: 1; max-width: 72px;
+            background: #16213e; border: 1px solid #2a3a5e;
+            border-radius: 6px; color: #eee; font-size: 19px; cursor: pointer;
+        }
+        .kbd-key:active { background: #1e2f5e; }
+
+        #kbd-bottom {
+            display: flex; gap: 5px; margin-top: 5px;
+        }
+        .kbd-special {
+            height: 56px; background: #0e1628; border: 1px solid #2a3a5e;
+            border-radius: 6px; color: #aaa; font-size: 15px; cursor: pointer; padding: 0 14px;
+        }
+        .kbd-special.on { color: #4a9eff; border-color: #4a9eff; }
+        #kbd-space { flex: 1; }
+        .kbd-ok { background: #1a3a1a; color: #4caf50; border-color: #2a5a2a; }
+        #kbd-cancel {
+            width: 100%; padding: 12px; background: #2a2a2a; border: none;
+            border-radius: 6px; color: #888; font-size: 15px; cursor: pointer; margin-top: 5px;
+        }
+
+        .btn { padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; min-height: 44px; }
+        .btn-edit  { background: #1e3a5f; color: #4a9eff; }
+        .btn-save  { background: #1a3a1a; color: #4caf50; }
+        .btn-cancel{ background: #2a2a2a; color: #888; }
+        .btn:hover { opacity: 0.8; }
+
+        .pin-bar {
+            display: flex; align-items: center; gap: 10px;
+            background: #16213e; padding: 10px 16px; border-radius: 6px;
+        }
+        .pin-bar input { background: #222; border: 1px solid #444; color: #eee; padding: 5px 10px; border-radius: 4px; width: 100px; display: none; }
+        .pin-bar span  { color: #888; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <button onclick="showTab('home')" id="btn-home" class="active">Головна</button>
+        <button onclick="showTab('params')" id="btn-params">Графіки</button>
+        <button onclick="showTab('monitor')" id="btn-monitor">Дані</button>
+        <button onclick="showTab('configs')" id="btn-configs">Налаштування</button>
+        <button onclick="showTab('charts')" id="btn-charts">Тест</button>
+        <div id="nav-brand">
+            Telemetry Portal
+            <span id="status">● очікування</span>
+        </div>
+    </nav>
+
+    <div class="tab active" id="tab-home">
+        <div id="home-title">Telemetry Portal</div>
+        <div id="home-buttons">
+            <button class="home-btn" onclick="showTab('params')">Графіки</button>
+            <button class="home-btn" onclick="showTab('monitor')">Дані</button>
+            <button class="home-btn" onclick="showTab('configs')">Налаштування</button>
+            <button class="home-btn" onclick="showTab('charts')">Тест</button>
+        </div>
+    </div>
+
+    <div class="tab" id="tab-monitor">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Канал</th>
+                    <th>Значення</th>
+                    <th>Час</th>
+                </tr>
+            </thead>
+            <tbody id="monitor-body">
+                <tr><td colspan="4" style="color:#555; padding:20px">Очікування даних...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="tab" id="tab-charts">
+        <iframe
+            src="http://localhost:3000/d/adtx2wz/channel-1?orgId=1&kiosk&refresh=10s&theme=dark"
+            allowfullscreen>
+        </iframe>
+    </div>
+
+    <div class="tab" id="tab-params">
+        <div id="params-back-bar">
+            <button class="btn btn-edit" onclick="showParams()">← Назад</button>
+            <span id="params-chart-title" style="color:#aaa; font-size:14px"></span>
+        </div>
+        <div id="params-content">
+            <div id="params-buttons"></div>
+            <iframe id="params-iframe"></iframe>
+        </div>
+    </div>
+
+    <div class="tab" id="tab-configs">
+        <div class="pin-bar">
+            <span>PIN:</span>
+            <input type="hidden" id="cfg-pin">
+            <button class="num-field" data-target="cfg-pin"
+                    onclick="openKeypad('cfg-pin','PIN',true)" style="min-width:120px; text-align:center">——</button>
+            <span id="cfg-msg" style="color:#888"></span>
+        </div>
+        <table id="cfg-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Модуль</th>
+                    <th>Назва</th>
+                    <th>Одиниці</th>
+                    <th>raw min</th>
+                    <th>raw max</th>
+                    <th>phys min</th>
+                    <th>phys max</th>
+                    <th>Увімк.</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="cfg-body"></tbody>
+        </table>
+    </div>
+
+    <div id="keypad-overlay">
+        <div id="keypad">
+            <div id="kp-label"></div>
+            <div id="kp-display">0</div>
+            <div id="kp-grid">
+                <button class="kp-btn" onclick="kpPress('7')">7</button>
+                <button class="kp-btn" onclick="kpPress('8')">8</button>
+                <button class="kp-btn" onclick="kpPress('9')">9</button>
+                <button class="kp-btn kp-btn-fn" onclick="kpBackspace()">⌫</button>
+                <button class="kp-btn" onclick="kpPress('4')">4</button>
+                <button class="kp-btn" onclick="kpPress('5')">5</button>
+                <button class="kp-btn" onclick="kpPress('6')">6</button>
+                <button class="kp-btn kp-btn-fn" onclick="kpClear()">C</button>
+                <button class="kp-btn" onclick="kpPress('1')">1</button>
+                <button class="kp-btn" onclick="kpPress('2')">2</button>
+                <button class="kp-btn" onclick="kpPress('3')">3</button>
+                <button class="kp-btn kp-btn-fn" onclick="kpToggleSign()">±</button>
+                <button class="kp-btn kp-btn-wide" onclick="kpPress('0')">0</button>
+                <button class="kp-btn kp-btn-fn" onclick="kpPress('.')">.</button>
+                <button class="kp-btn kp-btn-ok" onclick="kpConfirm()">OK</button>
+            </div>
+            <button id="kp-cancel" onclick="kpCancel()">Скасувати</button>
+        </div>
+    </div>
+
+    <div id="kbd-overlay">
+        <div id="kbd">
+            <div id="kbd-header">
+                <span id="kbd-label"></span>
+                <div id="kbd-display"> </div>
+            </div>
+            <div id="kbd-layout-tabs">
+                <button class="kbd-tab active" id="kbd-tab-uk" onclick="kbdSetLayout('uk')">УКР</button>
+                <button class="kbd-tab" id="kbd-tab-en" onclick="kbdSetLayout('en')">ENG</button>
+                <button class="kbd-tab" id="kbd-tab-sym" onclick="kbdSetLayout('sym')">!@#</button>
+            </div>
+            <div id="kbd-keys"></div>
+            <div id="kbd-bottom">
+                <button class="kbd-special" id="kbd-shift-btn" onclick="kbdShift()">⇧</button>
+                <button class="kbd-special" id="kbd-space" onclick="kbdPress(' ')">пробіл</button>
+                <button class="kbd-special" onclick="kbdBackspace()">⌫</button>
+                <button class="kbd-special" onclick="kbdClear()">C</button>
+                <button class="kbd-special kbd-ok" onclick="kbdConfirm()">OK</button>
+            </div>
+            <button id="kbd-cancel" onclick="kbdCancel()">Скасувати</button>
+        </div>
+    </div>
+
+    <script>
+        // ── Вкладки ──────────────────────────────────────────────────────────
+        function showTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            document.getElementById('btn-' + name).classList.add('active');
+        }
+
+        // ── SSE ──────────────────────────────────────────────────────────────
+        const statusEl = document.getElementById('status');
+        const tbody = document.getElementById('monitor-body');
+        let lastUpdate = 0;
+
+        function setStatus(live) {
+            statusEl.className = live ? 'live' : 'offline';
+            statusEl.textContent = live ? '● Live' : '● Offline';
+        }
+
+        function formatTime(iso) {
+            return new Date(iso).toLocaleTimeString('uk-UA');
+        }
+
+        function renderRows(rows) {
+            tbody.innerHTML = rows.map(r => {
+                const val = r.value !== null
+                    ? `<span class="val">${r.value}</span> <span class="unit">${r.unit}</span>`
+                    : `<span class="val null">—</span>`;
+                return `<tr>
+                    <td class="ch-id">${r.channel_id}</td>
+                    <td>${r.name}</td>
+                    <td>${val}</td>
+                    <td class="unit">${formatTime(r.time)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function connect() {
+            const es = new EventSource('/stream');
+
+            es.onmessage = (e) => {
+                const rows = JSON.parse(e.data);
+                renderRows(rows);
+                lastUpdate = Date.now();
+                setStatus(true);
+            };
+
+            es.onerror = () => {
+                setStatus(false);
+                es.close();
+                setTimeout(connect, 3000);
+            };
+        }
+
+        // Перевірка stale даних кожні 3 секунди
+        setInterval(() => {
+            if (lastUpdate && Date.now() - lastUpdate > 3000) setStatus(false);
+        }, 3000);
+
+        connect();
+
+        // ── Конфіги ─────────────────────────────────────────────────────────
+        let cfgData = [];
+        let currentEditId = null;
+
+        async function loadConfigs() {
+            const res = await fetch('/api/channels');
+            cfgData = await res.json();
+            renderConfigs();
+        }
+
+        function renderConfigs() {
+            currentEditId = null;
+            const tbody = document.getElementById('cfg-body');
+            tbody.innerHTML = cfgData.map(r => `
+                <tr id="row-${r.channel_id}" data-id="${r.channel_id}">
+                    <td class="ch-id">${r.channel_id}</td>
+                    <td class="unit">${r.module}</td>
+                    <td>${r.name}</td>
+                    <td>${r.unit}</td>
+                    <td>${r.raw_min}</td>
+                    <td>${r.raw_max}</td>
+                    <td>${r.phys_min}</td>
+                    <td>${r.phys_max}</td>
+                    <td>${r.enabled ? '✓' : '—'}</td>
+                    <td><button class="btn btn-edit" onclick="editRow(${r.channel_id})">Редагувати</button></td>
+                </tr>`).join('');
+        }
+
+        function numField(fieldId, value, label) {
+            return `<input type="hidden" id="${fieldId}" value="${value}">
+                    <button class="num-field" data-target="${fieldId}" onclick="openKeypad('${fieldId}','${label}')">${value}</button>`;
+        }
+
+        function txtField(fieldId, value, label) {
+            const safe = (value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+            return `<input type="hidden" id="${fieldId}" value="${safe}">
+                    <button class="txt-field" data-target="${fieldId}" onclick="openKeyboard('${fieldId}','${label}')">${safe || '…'}</button>`;
+        }
+
+        function editRow(id) {
+            if (currentEditId !== null && currentEditId !== id) renderConfigs();
+            currentEditId = id;
+            const r = cfgData.find(x => x.channel_id === id);
+            const tr = document.getElementById('row-' + id);
+            tr.innerHTML = `
+                <td class="ch-id">${r.channel_id}</td>
+                <td class="unit">${r.module}</td>
+                <td>${txtField('e-name', r.name,      'Назва')}</td>
+                <td>${txtField('e-unit', r.unit || '', 'Одиниці')}</td>
+                <td>${numField('e-raw-min',  r.raw_min,  'raw min')}</td>
+                <td>${numField('e-raw-max',  r.raw_max,  'raw max')}</td>
+                <td>${numField('e-phys-min', r.phys_min, 'phys min')}</td>
+                <td>${numField('e-phys-max', r.phys_max, 'phys max')}</td>
+                <td>
+                    <input type="checkbox" id="e-enabled" ${r.enabled ? 'checked' : ''} style="display:none">
+                    <button class="toggle-btn ${r.enabled ? 'on' : ''}" id="e-enabled-btn" onclick="toggleEnabled()">
+                        ${r.enabled ? 'Увімк.' : 'Вимк.'}
+                    </button>
+                </td>
+                <td style="display:flex;gap:6px">
+                    <button class="btn btn-save"   onclick="saveRow(${id})">Зберегти</button>
+                    <button class="btn btn-cancel" onclick="renderConfigs()">Скасувати</button>
+                </td>`;
+        }
+
+        function toggleEnabled() {
+            const cb  = document.getElementById('e-enabled');
+            const btn = document.getElementById('e-enabled-btn');
+            cb.checked = !cb.checked;
+            btn.textContent = cb.checked ? 'Увімк.' : 'Вимк.';
+            btn.classList.toggle('on', cb.checked);
+        }
+
+        async function saveRow(id) {
+            const pin = document.getElementById('cfg-pin').value;
+            const msg = document.getElementById('cfg-msg');
+            const body = {
+                name:     document.getElementById('e-name').value,
+                unit:     document.getElementById('e-unit').value,
+                raw_min:  parseFloat(document.getElementById('e-raw-min').value),
+                raw_max:  parseFloat(document.getElementById('e-raw-max').value),
+                phys_min: parseFloat(document.getElementById('e-phys-min').value),
+                phys_max: parseFloat(document.getElementById('e-phys-max').value),
+                enabled:  document.getElementById('e-enabled').checked,
+                pin,
+            };
+            const res = await fetch(`/api/channels/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body),
+            });
+            if (res.ok) {
+                msg.style.color = '#4caf50';
+                msg.textContent = 'Збережено';
+                setTimeout(() => msg.textContent = '', 2000);
+                await loadConfigs();
+            } else {
+                const err = await res.json();
+                msg.style.color = '#f44336';
+                msg.textContent = err.detail || 'Помилка';
+            }
+        }
+
+        // Завантажити конфіги при переході на вкладку
+        const _showTab = showTab;
+        showTab = function(name) {
+            _showTab(name);
+            if (name === 'configs') loadConfigs();
+            if (name === 'params') loadParams();
+        };
+
+        // ── Параметри (вибір графіка) ────────────────────────────────────────
+        const GRAFANA_BASE = 'http://localhost:3000/d/ad5ztg4/uni-dash-board';
+        const GRAFANA_PARAMS = 'orgId=1&from=now-5m&to=now&timezone=browser&kiosk&theme=dark&refresh=1s&viewPanel=1';
+
+        let paramsLoaded = false;
+
+        async function loadParams() {
+            if (paramsLoaded) return;
+            const res = await fetch('/api/channels');
+            const channels = await res.json();
+            renderParamButtons(channels);
+            paramsLoaded = true;
+        }
+
+        function renderParamButtons(channels) {
+            const container = document.getElementById('params-buttons');
+            container.innerHTML = channels.map(ch => {
+                const name = ch.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+                const unit = (ch.unit || '').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+                return `<button class="param-btn" data-id="${ch.channel_id}" data-name="${name}" data-unit="${unit}">
+                    <div>${name}</div>
+                    ${unit ? `<div class="param-btn-unit">${unit}</div>` : ''}
+                </button>`;
+            }).join('');
+
+            container.querySelectorAll('.param-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    openParamChart(parseInt(btn.dataset.id), btn.dataset.name, btn.dataset.unit);
+                });
+            });
+        }
+
+        function openParamChart(channelId, name, unit) {
+            const unitParam = unit ? `&var-unit=${encodeURIComponent(unit)}` : '';
+            document.getElementById('params-iframe').src =
+                `${GRAFANA_BASE}?${GRAFANA_PARAMS}&var-channel_id=${channelId}${unitParam}`;
+            document.getElementById('params-buttons').style.display = 'none';
+            document.getElementById('params-back-bar').style.display = 'flex';
+            document.getElementById('params-iframe').style.display = 'block';
+            document.getElementById('params-chart-title').textContent = name;
+        }
+
+        // ── Цифрова клавіатура ───────────────────────────────────────────────
+        let kpTargetId = null;
+        let kpValue    = '0';
+        let kpIsPin    = false;
+
+        function kpDisplay() {
+            document.getElementById('kp-display').textContent =
+                kpIsPin ? (kpValue ? '●'.repeat(kpValue.length) : '——') : kpValue;
+        }
+
+        function openKeypad(inputId, label, isPin = false) {
+            kpTargetId = inputId;
+            kpIsPin    = isPin;
+            kpValue    = isPin ? (document.getElementById(inputId).value || '')
+                               : String(document.getElementById(inputId).value || '0');
+            document.getElementById('kp-label').textContent = label || '';
+            kpDisplay();
+            document.getElementById('keypad-overlay').classList.add('open');
+        }
+
+        function kpPress(char) {
+            if (kpIsPin) {
+                if (char === '.' || char === '-') return;
+                kpValue += char;
+            } else if (char === '.') {
+                if (kpValue.includes('.')) return;
+                kpValue += '.';
+            } else {
+                kpValue = (kpValue === '0' || kpValue === '-0')
+                    ? kpValue.replace('0', char) : kpValue + char;
+            }
+            kpDisplay();
+        }
+
+        function kpBackspace() {
+            kpValue = kpValue.length > 1 ? kpValue.slice(0, -1) : (kpIsPin ? '' : '0');
+            kpDisplay();
+        }
+
+        function kpClear() {
+            kpValue = kpIsPin ? '' : '0';
+            kpDisplay();
+        }
+
+        function kpToggleSign() {
+            if (kpIsPin) return;
+            kpValue = kpValue.startsWith('-') ? kpValue.slice(1) : '-' + kpValue;
+            kpDisplay();
+        }
+
+        function kpConfirm() {
+            if (kpTargetId) {
+                if (kpIsPin) {
+                    document.getElementById(kpTargetId).value = kpValue;
+                    const btn = document.querySelector(`.num-field[data-target="${kpTargetId}"]`);
+                    if (btn) btn.textContent = kpValue ? '●'.repeat(kpValue.length) : '——';
+                } else {
+                    const val = parseFloat(kpValue);
+                    const v   = isNaN(val) ? 0 : val;
+                    document.getElementById(kpTargetId).value = v;
+                    const btn = document.querySelector(`.num-field[data-target="${kpTargetId}"]`);
+                    if (btn) btn.textContent = v;
+                }
+            }
+            kpCancel();
+        }
+
+        function kpCancel() {
+            document.getElementById('keypad-overlay').classList.remove('open');
+            kpTargetId = null;
+        }
+
+        // ── Віртуальна клавіатура ────────────────────────────────────────────
+        const KBD_LAYOUTS = {
+            uk: [
+                ['й','ц','у','к','е','н','г','ш','щ','з','х','ї'],
+                ['ф','и','в','а','п','р','о','л','д','ж','є'],
+                ['я','ч','с','м','и','т','ь','б','ю'],
+            ],
+            en: [
+                ['q','w','e','r','t','y','u','i','o','p'],
+                ['a','s','d','f','g','h','j','k','l'],
+                ['z','x','c','v','b','n','m'],
+            ],
+            sym: [
+                ['°','%','/','\\','-','_','+','=','(',')',],
+                ['.', ',', ':', ';', '!', '?', '@', '#'],
+                ['<', '>', '[', ']', '{', '}', '~', '^'],
+            ],
+        };
+
+        let kbdTargetId = null;
+        let kbdValue    = '';
+        let kbdShifted  = false;
+        let kbdCurrentLayout = 'uk';
+
+        function openKeyboard(inputId, label) {
+            kbdTargetId = inputId;
+            kbdValue    = document.getElementById(inputId).value || '';
+            kbdShifted  = false;
+            document.getElementById('kbd-display').textContent = kbdValue || ' ';
+            document.getElementById('kbd-label').textContent   = label || '';
+            kbdSetLayout('uk');
+            document.getElementById('kbd-overlay').classList.add('open');
+        }
+
+        function kbdSetLayout(layout) {
+            kbdCurrentLayout = layout;
+            ['uk','en','sym'].forEach(l =>
+                document.getElementById('kbd-tab-' + l).classList.toggle('active', l === layout)
+            );
+            kbdRender();
+        }
+
+        function kbdRender() {
+            const rows = KBD_LAYOUTS[kbdCurrentLayout];
+            const container = document.getElementById('kbd-keys');
+            container.innerHTML = rows.map(row =>
+                `<div class="kbd-row">${
+                    row.map(k => {
+                        const ch = kbdShifted ? k.toUpperCase() : k;
+                        return `<button class="kbd-key" data-char="${ch}">${ch}</button>`;
+                    }).join('')
+                }</div>`
+            ).join('');
+            container.querySelectorAll('.kbd-key').forEach(btn =>
+                btn.addEventListener('click', () => kbdPress(btn.dataset.char))
+            );
+            document.getElementById('kbd-shift-btn').classList.toggle('on', kbdShifted);
+        }
+
+        function kbdPress(char) {
+            kbdValue += char;
+            document.getElementById('kbd-display').textContent = kbdValue;
+            if (kbdShifted && kbdCurrentLayout !== 'sym') {
+                kbdShifted = false;
+                kbdRender();
+            }
+        }
+
+        function kbdBackspace() {
+            kbdValue = kbdValue.slice(0, -1);
+            document.getElementById('kbd-display').textContent = kbdValue || ' ';
+        }
+
+        function kbdClear() {
+            kbdValue = '';
+            document.getElementById('kbd-display').textContent = ' ';
+        }
+
+        function kbdShift() {
+            kbdShifted = !kbdShifted;
+            kbdRender();
+        }
+
+        function kbdConfirm() {
+            if (kbdTargetId) {
+                document.getElementById(kbdTargetId).value = kbdValue;
+                const btn = document.querySelector(`.txt-field[data-target="${kbdTargetId}"]`);
+                if (btn) btn.textContent = kbdValue || '…';
+            }
+            kbdCancel();
+        }
+
+        function kbdCancel() {
+            document.getElementById('kbd-overlay').classList.remove('open');
+            kbdTargetId = null;
+        }
+
+        function showParams() {
+            document.getElementById('params-iframe').src = '';
+            document.getElementById('params-iframe').style.display = 'none';
+            document.getElementById('params-back-bar').style.display = 'none';
+            document.getElementById('params-buttons').style.display = 'grid';
+            document.getElementById('params-chart-title').textContent = '';
+        }
+    </script>
+</body>
+</html>

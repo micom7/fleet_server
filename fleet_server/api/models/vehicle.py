@@ -18,7 +18,7 @@ class VehicleOut(BaseModel):
 class VehicleCreate(BaseModel):
     name:     str
     vpn_ip:   str
-    api_port: int = 8080
+    api_port: int = 8001
 
 
 class AssignVehicleBody(BaseModel):

@@ -15,7 +15,7 @@ import psycopg2.extras
 DEMO_EMAIL = "demo@example.com"
 DEMO_NAME  = "Demo User"
 DEMO_VPN   = "10.0.0.99"
-DEMO_PORT  = 8080
+DEMO_PORT  = 8001
 
 
 def main():

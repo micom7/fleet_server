@@ -1,0 +1,13 @@
+Потрібно явно кастити до timestamptz:       
+
+
+SELECT time, channel_id, value                                                                             
+  FROM measurements                                                                                          
+  WHERE time >= '2026-02-18 15:30:34.451337+02'::timestamptz - interval '1 hour'                                 AND time <  '2026-02-18 15:30:34.451337+02'::timestamptz                                                 
+  ORDER BY time DESC;
+
+EXPLAIN ANALYZE 
+  SELECT time, channel_id, value                                                                             
+  FROM measurements                                                                                          
+  WHERE time >= '2026-02-18 15:30:34.451337+02'::timestamptz - interval '1 hour'                                 AND time <  '2026-02-18 15:30:34.451337+02'::timestamptz                                                 
+  ORDER BY time DESC;

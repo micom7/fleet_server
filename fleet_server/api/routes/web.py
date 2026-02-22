@@ -465,7 +465,7 @@ def web_assign(
 def web_add_vehicle(
     name: str = Form(...),
     vpn_ip: str = Form(...),
-    api_port: int = Form(default=8080),
+    api_port: int = Form(default=8001),
     access_token: str | None = Cookie(default=None),
 ):
     cu = _user_from_cookie(access_token)

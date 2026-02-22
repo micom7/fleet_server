@@ -13,7 +13,7 @@
 
 **PowerShell:**
 ```powershell
-cd F:\fleet_server\api
+cd F:\fleet_server\fleet_server\api
 pip install -r requirements.txt
 ```
 
@@ -31,7 +31,7 @@ psql -U postgres -c "CREATE USER fleet_app WITH PASSWORD 'devpassword';"
 psql -U postgres -c "CREATE DATABASE fleet OWNER fleet_app;"
 
 # Застосувати схему
-psql -U postgres -d fleet -f F:\fleet_server\db\01_init.sql
+psql -U postgres -d fleet -f F:\fleet_server\fleet_server\db\01_init.sql
 ```
 
 ### 1.4. Пароль адміна
@@ -39,7 +39,7 @@ psql -U postgres -d fleet -f F:\fleet_server\db\01_init.sql
 Схема створює адміна **без пароля**. Встановити його (запустити один раз):
 
 ```powershell
-cd F:\fleet_server
+cd F:\fleet_server\fleet_server
 python -c "
 import bcrypt, psycopg2
 h = bcrypt.hashpw(b'Admin123!', bcrypt.gensalt(rounds=12)).decode()
@@ -60,13 +60,13 @@ Backend і Frontend — **одна команда** (FastAPI роздає і API
 
 **PowerShell:**
 ```powershell
-cd F:\fleet_server\api
+cd F:\fleet_server\fleet_server\api
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **Git Bash:**
 ```bash
-cd /f/fleet_server/api
+cd /f/fleet_server/fleet_server/api
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -145,5 +145,8 @@ fleet_server/
 │       └── partials/
 ├── .env                    # Локальні змінні (не в git)
 ├── .env.example            # Шаблон .env
-└── STARTUP.md              # Цей файл
+└── docs/
+    ├── SERVER_README.md    # Архітектура
+    ├── STARTUP.md          # Цей файл
+    └── Credential.md       # Тестові облікові дані
 ```

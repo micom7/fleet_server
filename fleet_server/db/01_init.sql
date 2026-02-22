@@ -57,14 +57,17 @@ CREATE INDEX idx_revoked_tokens_expires ON revoked_tokens (expires_at);
 -- VEHICLES
 -- ────────────────────────────────────────────────────────────────────
 CREATE TABLE vehicles (
-    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    name         TEXT        NOT NULL,
-    vpn_ip       INET        NOT NULL UNIQUE,   -- 10.0.0.11 .. 10.0.0.20
-    api_port     INTEGER     NOT NULL DEFAULT 8080,
-    last_seen_at TIMESTAMPTZ,
-    sync_status  TEXT        NOT NULL DEFAULT 'unknown'
-                             CHECK (sync_status IN ('ok', 'timeout', 'error', 'unknown')),
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name             TEXT        NOT NULL,
+    vpn_ip           INET        NOT NULL UNIQUE,   -- 10.0.0.11 .. 10.0.0.20
+    api_port         INTEGER     NOT NULL DEFAULT 8001,  -- Outbound API порт на машині
+    api_key          TEXT,                              -- per-vehicle ключ; NULL → VEHICLE_DEFAULT_API_KEY
+    last_seen_at     TIMESTAMPTZ,
+    last_sync_at     TIMESTAMPTZ,                       -- час останнього успішного sync (для gap-filling)
+    sync_status      TEXT        NOT NULL DEFAULT 'unknown'
+                                 CHECK (sync_status IN ('ok', 'timeout', 'error', 'unknown')),
+    software_version TEXT,                              -- версія ПЗ з /status (для відстеження оновлень)
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ────────────────────────────────────────────────────────────────────
@@ -108,6 +111,11 @@ CREATE TABLE measurements (
     PRIMARY KEY (id, time)
 ) PARTITION BY RANGE (time);
 
+-- UNIQUE включає partition key (time) — вимога PostgreSQL для партиціонованих таблиць
+-- Використовується Sync Service: INSERT ... ON CONFLICT (vehicle_id, channel_id, time) DO NOTHING
+CREATE UNIQUE INDEX idx_measurements_unique
+    ON measurements (vehicle_id, channel_id, time);
+
 CREATE INDEX idx_measurements_lookup
     ON measurements (vehicle_id, channel_id, time DESC);
 
@@ -137,7 +145,7 @@ END $$;
 CREATE TABLE alarms_log (
     id          BIGSERIAL   PRIMARY KEY,
     vehicle_id  UUID        NOT NULL REFERENCES vehicles (id) ON DELETE CASCADE,
-    alarm_id    INTEGER     NOT NULL,            -- ID тривоги на авто
+    alarm_id    BIGINT      NOT NULL,            -- ID тривоги на авто (BIGSERIAL на машині → BIGINT тут)
     channel_id  INTEGER,
     severity    TEXT,
     message     TEXT        NOT NULL,
@@ -146,6 +154,8 @@ CREATE TABLE alarms_log (
     synced_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE UNIQUE INDEX idx_alarms_vehicle_alarm_unique
+    ON alarms_log (vehicle_id, alarm_id);         -- для ON CONFLICT при upsert resolved_at
 CREATE INDEX idx_alarms_vehicle_time
     ON alarms_log (vehicle_id, triggered_at DESC);
 CREATE INDEX idx_alarms_active
@@ -249,7 +259,7 @@ VALUES ('admin@example.com', 'superuser', 'active', 'Fleet Admin');
 -- VALUES ('demo@example.com', 'owner', 'active', 'Demo User');
 --
 -- INSERT INTO vehicles (name, vpn_ip, api_port)
--- VALUES ('Demo Vehicle', '10.0.0.99', 8080);
+-- VALUES ('Demo Vehicle', '10.0.0.99', 8001);
 --
 -- INSERT INTO vehicle_access (user_id, vehicle_id)
 -- SELECT u.id, v.id

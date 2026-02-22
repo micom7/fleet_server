@@ -1,0 +1,8 @@
+# Modbus TCP клієнт (3.12+: device_id замість slave, count — keyword-only)
+pymodbus>=3.12.0
+# PostgreSQL + LISTEN/NOTIFY (pg_notify для перезавантаження конфігу)
+psycopg2-binary>=2.9.9
+# ZeroMQ PUB — шина даних до Monitor та Portal
+pyzmq>=25.0.0
+# Завантаження .env
+python-dotenv>=1.0.0

@@ -1,7 +1,18 @@
-.env
-*.pyc
+# Локальні .env файли з секретами — в кожній підпапці
+fleet_server/.env
+auto_telemetry/.env
+auto_telemetry/credentials.env
+
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
 .venv/
-nginx/certs/
-postgres_data/
-grafana_data/
+venv/
+
+# Node (якщо використовується для білду UI)
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
