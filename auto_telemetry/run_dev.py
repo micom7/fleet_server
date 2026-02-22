@@ -6,6 +6,7 @@ Dev runner — запускає всі сервіси auto_telemetry в одно
     python run_dev.py --no-sims        # без симуляторів
     python run_dev.py --no-collector   # без колектора
     python run_dev.py --no-api         # без API
+    python run_dev.py --outbound       # + Outbound API :8001 (для Fleet Server)
 """
 
 import argparse
@@ -27,6 +28,7 @@ _C = {
     "sim3":      "\033[35m",    # magenta
     "collector": "\033[33m",    # yellow
     "api":       "\033[32m",    # green
+    "outbound":  "\033[34m",    # blue
 }
 _RST  = "\033[0m"
 _BOLD = "\033[1m"
@@ -76,6 +78,7 @@ def main() -> None:
     parser.add_argument("--no-collector", action="store_true", help="Не запускати колектор")
     parser.add_argument("--api",          action="store_true", help="Запустити API (uvicorn)")
     parser.add_argument("--api-port",     type=int, default=8100, help="Порт API (default: 8100)")
+    parser.add_argument("--outbound",     action="store_true", help="Запустити Outbound API :8001 (для Fleet Server)")
     opts = parser.parse_args()
 
     py = sys.executable
@@ -117,6 +120,15 @@ def main() -> None:
             "api", API_DIR,
         )))
         _log(f"API: http://127.0.0.1:{opts.api_port}")
+
+    # ── Outbound API (Fleet Server pull) ──────────────────────────────────────
+    if opts.outbound:
+        procs.append(("outbound", _start(
+            [py, "-m", "uvicorn", "outbound.main:app",
+             "--host", "0.0.0.0", "--port", "8001"],
+            "outbound", ROOT,
+        )))
+        _log("Outbound API: http://0.0.0.0:8001  (X-API-Key: див. .env OUTBOUND_API_KEY)")
 
     if not procs:
         _warn("Немає сервісів для запуску (всі вимкнені флагами).")

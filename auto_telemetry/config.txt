@@ -30,3 +30,6 @@ MODBUS_ET7284_UNIT_ID=1
 POLLING_FREQUENCY_HZ=1.0   # Частота опитування модулів (1 Гц = 1 раз на секунду)
 MODBUS_TIMEOUT_SEC=0.5     # Таймаут Modbus запитів
 RECONNECT_DELAY_SEC=1      # Затримка перед перепідключенням при втраті зв'язку
+
+# === Outbound API (Fleet Server pull) ===
+OUTBOUND_PORT = 8001       # Порт Outbound API для Fleet Server

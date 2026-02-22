@@ -1,7 +1,7 @@
 # Auto Telemetry ↔ Fleet Server — Контракт синхронізації даних
 
-**Версія:** 1.2  
-**Дата:** 2026-02-22  
+**Версія:** 1.3
+**Дата:** 2026-02-22
 **Репозиторії:** `auto_telemetry` (машина) · `fleet_server` (сервер)
 
 ### Changelog
@@ -10,6 +10,7 @@
 | 1.0 | Початковий контракт |
 | 1.1 | Карта сервісів, `software_version`, `agent_running` у `/status`, розмежування систем автентифікації |
 | 1.2 | **Виправлення протиріч з кодом:** (1) порт `api_port` 8080→8001; (2) `/alarms` потребує JOIN з `alarm_rules` для `severity`; (3) `alarm_id` тип INTEGER→BIGINT |
+| 1.3 | Стиснення відповідей gzip (`GZipMiddleware`, `minimum_size=500`); Fleet Server повинен надсилати `Accept-Encoding: gzip` |
 
 ---
 
@@ -43,9 +44,10 @@
          channel_config            →  fleet DB: channel_config
 ```
 
-**Принцип:** Fleet Server завжди **pull**. Машина нічого не пушить.  
-**Транспорт:** HTTP/1.1 over WireGuard VPN (`10.0.0.x`).  
+**Принцип:** Fleet Server завжди **pull**. Машина нічого не пушить.
+**Транспорт:** HTTP/1.1 over WireGuard VPN (`10.0.0.x`).
 **Автентифікація:** статичний API-ключ у заголовку `X-API-Key` (VPN ізолює мережу, але ключ потрібен щоб ідентифікувати авторизований Fleet Server серед інших клієнтів VPN).
+**Стиснення:** Outbound API стискає відповіді gzip для тіл > 500 байт. Fleet Server **повинен** надсилати заголовок `Accept-Encoding: gzip` — `httpx` робить це автоматично за замовчуванням.
 
 ---
 
