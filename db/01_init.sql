@@ -172,7 +172,9 @@ CREATE INDEX idx_sync_journal_vehicle_time
 -- ────────────────────────────────────────────────────────────────────
 
 -- vehicles: owner бачить тільки свої; superuser — всі
+-- FORCE потрібен бо fleet_app є власником таблиць
 ALTER TABLE vehicles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vehicles FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY vehicles_superuser ON vehicles
     USING (current_setting('app.user_role', true) = 'superuser');
@@ -182,12 +184,13 @@ CREATE POLICY vehicles_owner ON vehicles
         current_setting('app.user_role', true) = 'owner'
         AND id IN (
             SELECT vehicle_id FROM vehicle_access
-            WHERE user_id = current_setting('app.user_id', true)::UUID
+            WHERE user_id = NULLIF(current_setting('app.user_id', true), '')::UUID
         )
     );
 
 -- measurements: через vehicle_id
 ALTER TABLE measurements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE measurements FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY measurements_superuser ON measurements
     USING (current_setting('app.user_role', true) = 'superuser');
@@ -197,12 +200,13 @@ CREATE POLICY measurements_owner ON measurements
         current_setting('app.user_role', true) = 'owner'
         AND vehicle_id IN (
             SELECT vehicle_id FROM vehicle_access
-            WHERE user_id = current_setting('app.user_id', true)::UUID
+            WHERE user_id = NULLIF(current_setting('app.user_id', true), '')::UUID
         )
     );
 
 -- alarms_log: аналогічно
 ALTER TABLE alarms_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alarms_log FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY alarms_superuser ON alarms_log
     USING (current_setting('app.user_role', true) = 'superuser');
@@ -212,13 +216,16 @@ CREATE POLICY alarms_owner ON alarms_log
         current_setting('app.user_role', true) = 'owner'
         AND vehicle_id IN (
             SELECT vehicle_id FROM vehicle_access
-            WHERE user_id = current_setting('app.user_id', true)::UUID
+            WHERE user_id = NULLIF(current_setting('app.user_id', true), '')::UUID
         )
     );
 
 -- ────────────────────────────────────────────────────────────────────
 -- GRANTS  (fleet_app — єдиний користувач додатку)
 -- ────────────────────────────────────────────────────────────────────
+-- fleet_app не має бути superuser / bypassrls — RLS повинен працювати
+ALTER ROLE fleet_app NOSUPERUSER NOBYPASSRLS;
+
 GRANT USAGE ON SCHEMA public TO fleet_app;
 GRANT ALL ON ALL TABLES    IN SCHEMA public TO fleet_app;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO fleet_app;
@@ -234,3 +241,18 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- Пароль встановити через API після першого запуску
 INSERT INTO users (email, role, status, full_name)
 VALUES ('admin@example.com', 'superuser', 'active', 'Fleet Admin');
+
+-- ────────────────────────────────────────────────────────────────────
+-- DEMO USER + VEHICLE  (виконати через seed_demo.py)
+-- ────────────────────────────────────────────────────────────────────
+-- INSERT INTO users (email, role, status, full_name)
+-- VALUES ('demo@example.com', 'owner', 'active', 'Demo User');
+--
+-- INSERT INTO vehicles (name, vpn_ip, api_port)
+-- VALUES ('Demo Vehicle', '10.0.0.99', 8080);
+--
+-- INSERT INTO vehicle_access (user_id, vehicle_id)
+-- SELECT u.id, v.id
+-- FROM users u, vehicles v
+-- WHERE u.email = 'demo@example.com'
+--   AND v.name  = 'Demo Vehicle';

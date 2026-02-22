@@ -1,0 +1,41 @@
+<tr id="vehicle-row-{{ v.id }}">
+  <td><a href="/vehicles/{{ v.id }}">{{ v.name }}</a></td>
+  <td><code>{{ v.vpn_ip }}</code></td>
+  <td>
+    {% if v.sync_status == 'ok' %}<span class="badge badge-success">ok</span>
+    {% elif v.sync_status == 'error' %}<span class="badge badge-danger">error</span>
+    {% elif v.sync_status == 'timeout' %}<span class="badge badge-warning">timeout</span>
+    {% else %}<span class="badge badge-secondary">{{ v.sync_status }}</span>{% endif %}
+  </td>
+  <td>
+    {% set vid = v.id | string %}
+    {% if vid in access_map %}
+      {% for uid in access_map[vid] %}
+        {% for u in active_owners if u.id | string == uid %}
+        <span class="badge badge-info mr-1">
+          {{ u.email }}
+          <a href="#"
+             hx-delete="/web/admin/vehicles/{{ vid }}/assign/{{ uid }}"
+             hx-target="#vehicle-row-{{ vid }}"
+             hx-swap="outerHTML"
+             class="text-white ml-1">×</a>
+        </span>
+        {% endfor %}
+      {% endfor %}
+    {% else %}<span class="text-muted">—</span>{% endif %}
+  </td>
+  <td>
+    <form hx-post="/web/admin/vehicles/{{ v.id }}/assign"
+          hx-target="#vehicle-row-{{ v.id }}"
+          hx-swap="outerHTML"
+          class="d-flex">
+      <select name="user_id" class="form-control form-control-sm mr-2" style="max-width:180px">
+        <option value="">— обрати —</option>
+        {% for u in active_owners %}
+        <option value="{{ u.id }}">{{ u.email }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-primary">Призначити</button>
+    </form>
+  </td>
+</tr>

@@ -1,22 +1,10 @@
 {% if not alarms %}
-<p class="text-sm text-gray-400 text-center py-4">Активних тривог немає</p>
+<p class="text-muted text-center py-2 mb-0 small">Активних тривог немає</p>
 {% else %}
-<div class="space-y-2">
-  {% for a in alarms %}
-  <div class="flex gap-2 text-xs p-2 rounded-lg
-              {% if a.severity == 'critical' %}bg-red-50 border border-red-200
-              {% elif a.severity == 'warning' %}bg-yellow-50 border border-yellow-200
-              {% else %}bg-gray-50 border border-gray-200{% endif %}">
-    <span class="shrink-0">
-      {% if a.severity == 'critical' %}🔴
-      {% elif a.severity == 'warning' %}🟡
-      {% else %}⚪{% endif %}
-    </span>
-    <div class="min-w-0">
-      <p class="font-medium text-gray-800 truncate">{{ a.message }}</p>
-      <p class="text-gray-400 mt-0.5">{{ a.triggered_at.strftime('%d.%m %H:%M') }}</p>
-    </div>
-  </div>
-  {% endfor %}
+{% for a in alarms %}
+<div class="callout callout-{% if a.severity == 'critical' %}danger{% elif a.severity == 'warning' %}warning{% else %}info{% endif %} p-2 mb-1">
+  <p class="mb-0 small font-weight-bold">{{ a.message }}</p>
+  <small class="text-muted">{{ a.triggered_at.strftime('%d.%m %H:%M') }}</small>
 </div>
+{% endfor %}
 {% endif %}

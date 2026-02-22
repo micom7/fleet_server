@@ -46,10 +46,21 @@ def _get_vehicles(user: AuthUser) -> list[dict]:
     now = dt.datetime.now(dt.timezone.utc)
     with get_conn(str(user.id), user.role) as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, last_seen_at, sync_status "
-                "FROM vehicles ORDER BY name"
-            )
+            if user.role == "owner":
+                cur.execute(
+                    "SELECT v.id, v.name, host(v.vpn_ip) AS vpn_ip, v.api_port, "
+                    "v.last_seen_at, v.sync_status "
+                    "FROM vehicles v "
+                    "JOIN vehicle_access va ON va.vehicle_id = v.id "
+                    "WHERE va.user_id = %s "
+                    "ORDER BY v.name",
+                    (str(user.id),),
+                )
+            else:
+                cur.execute(
+                    "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, last_seen_at, sync_status "
+                    "FROM vehicles ORDER BY name"
+                )
             rows = cur.fetchall()
     result = []
     for r in rows:
@@ -64,11 +75,21 @@ def _get_vehicle(vehicle_id: str, user: AuthUser) -> dict | None:
     now = dt.datetime.now(dt.timezone.utc)
     with get_conn(str(user.id), user.role) as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, last_seen_at, sync_status "
-                "FROM vehicles WHERE id = %s",
-                (vehicle_id,),
-            )
+            if user.role == "owner":
+                cur.execute(
+                    "SELECT v.id, v.name, host(v.vpn_ip) AS vpn_ip, v.api_port, "
+                    "v.last_seen_at, v.sync_status "
+                    "FROM vehicles v "
+                    "JOIN vehicle_access va ON va.vehicle_id = v.id "
+                    "WHERE v.id = %s AND va.user_id = %s",
+                    (vehicle_id, str(user.id)),
+                )
+            else:
+                cur.execute(
+                    "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, last_seen_at, sync_status "
+                    "FROM vehicles WHERE id = %s",
+                    (vehicle_id,),
+                )
             row = cur.fetchone()
     if not row:
         return None
@@ -81,6 +102,13 @@ def _get_vehicle(vehicle_id: str, user: AuthUser) -> dict | None:
 def _get_alarms(vehicle_id: str, user: AuthUser) -> list[dict]:
     with get_conn(str(user.id), user.role) as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            if user.role == "owner":
+                cur.execute(
+                    "SELECT 1 FROM vehicle_access WHERE vehicle_id = %s AND user_id = %s",
+                    (vehicle_id, str(user.id)),
+                )
+                if not cur.fetchone():
+                    return []
             cur.execute(
                 "SELECT id, alarm_id, severity, message, triggered_at "
                 "FROM alarms_log WHERE vehicle_id = %s AND resolved_at IS NULL "
@@ -111,7 +139,7 @@ def login_page(
         return RedirectResponse(url="/fleet", status_code=302)
     return templates.TemplateResponse("login.html", {
         "request": request, "user": None,
-        "error": error, "msg": msg, "show_register": False,
+        "error": error, "msg": msg, "show_register": False, "show_demo": False,
     })
 
 
@@ -151,7 +179,7 @@ def register_page(
 ):
     return templates.TemplateResponse("login.html", {
         "request": request, "user": None,
-        "error": error, "msg": msg, "show_register": True,
+        "error": error, "msg": msg, "show_register": True, "show_demo": False,
     })
 
 
@@ -187,6 +215,29 @@ def logout():
     resp = RedirectResponse(url="/login", status_code=302)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
+    return resp
+
+
+@router.get("/demo-info")
+def demo_info_page(request: Request):
+    return templates.TemplateResponse("login.html", {
+        "request": request, "user": None,
+        "error": None, "msg": None, "show_register": False, "show_demo": True,
+    })
+
+
+@router.get("/demo")
+def demo_login():
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, role, status FROM users WHERE email = 'demo@example.com'",
+            )
+            user = cur.fetchone()
+    if not user or user["status"] != "active":
+        return RedirectResponse(url="/login?error=Demo+не+налаштовано", status_code=302)
+    resp = RedirectResponse(url="/fleet", status_code=302)
+    _set_auth_cookies(resp, str(user["id"]), user["role"])
     return resp
 
 
@@ -260,6 +311,7 @@ def alarms_partial(
 def admin_page(
     request: Request,
     tab: str = "users",
+    error: str | None = None,
     access_token: str | None = Cookie(default=None),
 ):
     user = _user_from_cookie(access_token)
@@ -268,7 +320,7 @@ def admin_page(
     if user.role != "superuser":
         return RedirectResponse(url="/fleet", status_code=302)
 
-    with get_conn() as conn:
+    with get_conn(str(user.id), user.role) as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 "SELECT id, email, role, status, full_name, created_at "
@@ -298,6 +350,7 @@ def admin_page(
         "access_map": access_map,
         "active_owners": active_owners,
         "tab": tab,
+        "error": error,
         "active": "admin",
     })
 
@@ -361,8 +414,34 @@ def web_unblock(
                                       {"request": request, "u": row, "cu": cu})
 
 
+def _vehicle_row_context(vehicle_id: str, user_id: str, user_role: str) -> dict:
+    with get_conn(user_id, user_role) as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, sync_status "
+                "FROM vehicles WHERE id = %s",
+                (vehicle_id,),
+            )
+            v = dict(cur.fetchone())
+
+            cur.execute(
+                "SELECT user_id::text FROM vehicle_access WHERE vehicle_id = %s",
+                (vehicle_id,),
+            )
+            owner_ids = [r["user_id"] for r in cur.fetchall()]
+
+            cur.execute(
+                "SELECT id, email FROM users WHERE status = 'active' AND role = 'owner'"
+            )
+            active_owners = [dict(r) for r in cur.fetchall()]
+
+    access_map = {str(vehicle_id): owner_ids} if owner_ids else {}
+    return {"v": v, "access_map": access_map, "active_owners": active_owners}
+
+
 @router.post("/web/admin/vehicles/{vehicle_id}/assign")
 def web_assign(
+    request: Request,
     vehicle_id: str,
     user_id: str = Form(...),
     access_token: str | None = Cookie(default=None),
@@ -370,28 +449,56 @@ def web_assign(
     cu = _user_from_cookie(access_token)
     if not cu or cu.role != "superuser":
         return HTMLResponse("")
-    with get_conn() as conn:
+    with get_conn(str(cu.id), cu.role) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO vehicle_access (user_id, vehicle_id) "
                 "VALUES (%s, %s) ON CONFLICT DO NOTHING",
                 (user_id, vehicle_id),
             )
-    return HTMLResponse("<span class='text-green-600 text-sm font-medium'>✓ Призначено</span>")
+    ctx = _vehicle_row_context(vehicle_id, str(cu.id), cu.role)
+    return templates.TemplateResponse("partials/vehicle_row.html",
+                                      {"request": request, **ctx})
+
+
+@router.post("/web/admin/vehicles")
+def web_add_vehicle(
+    name: str = Form(...),
+    vpn_ip: str = Form(...),
+    api_port: int = Form(default=8080),
+    access_token: str | None = Cookie(default=None),
+):
+    cu = _user_from_cookie(access_token)
+    if not cu or cu.role != "superuser":
+        return RedirectResponse(url="/login", status_code=302)
+    try:
+        with get_conn(str(cu.id), cu.role) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO vehicles (name, vpn_ip, api_port) "
+                    "VALUES (%s, %s::inet, %s)",
+                    (name.strip(), vpn_ip.strip(), api_port),
+                )
+    except Exception:
+        return RedirectResponse(url="/admin?tab=vehicles&error=1", status_code=302)
+    return RedirectResponse(url="/admin?tab=vehicles", status_code=302)
 
 
 @router.delete("/web/admin/vehicles/{vehicle_id}/assign/{uid}")
 def web_unassign(
+    request: Request,
     vehicle_id: str, uid: str,
     access_token: str | None = Cookie(default=None),
 ):
     cu = _user_from_cookie(access_token)
     if not cu or cu.role != "superuser":
         return HTMLResponse("")
-    with get_conn() as conn:
+    with get_conn(str(cu.id), cu.role) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM vehicle_access WHERE user_id = %s AND vehicle_id = %s",
                 (uid, vehicle_id),
             )
-    return HTMLResponse("")
+    ctx = _vehicle_row_context(vehicle_id, str(cu.id), cu.role)
+    return templates.TemplateResponse("partials/vehicle_row.html",
+                                      {"request": request, **ctx})
