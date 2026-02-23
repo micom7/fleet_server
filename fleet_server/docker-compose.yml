@@ -43,6 +43,9 @@ services:
       postgres:
         condition: service_healthy
     # Немає портів — тільки вихідні з'єднання до авто через VPN
+    networks:
+      - default
+      - telemetry_net    # доступ до outbound API симулятора (10.200.0.2:8001)
     restart: unless-stopped
 
   grafana:
@@ -83,3 +86,9 @@ services:
 volumes:
   postgres_data:
   grafana_data:
+
+networks:
+  default: {}
+  telemetry_net:
+    name: telemetry_net
+    external: true

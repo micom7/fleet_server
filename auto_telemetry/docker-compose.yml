@@ -1,110 +1,71 @@
-# Оркестрація: TimescaleDB, Grafana, Collector, API.
-# Збереження даних БД на томі (volume).
-# Облікові дані з файлу credentials.env (тестові, відкриті)
+# auto_telemetry — симуляція авто (незалежний Docker-проєкт)
+#
+# Мережа:
+#   - telemetry_net (external) — спільна з fleet_server, дає sync доступ до outbound API
+#   - Перед першим запуском: docker network create --subnet 10.200.0.0/24 telemetry_net
+#
+# Реєструй авто у fleet_server admin:
+#   vpn_ip   = 10.200.0.2
+#   api_port = 8001
+#   api_key  = значення OUTBOUND_API_KEY з .env
+#
+# Запуск:  docker compose up -d
+# Логи:    docker compose logs -f simulator
+#          docker compose logs -f outbound
 
 services:
+
   postgres:
-    build: ./db
-    env_file:
-      - credentials.env
+    image: postgres:16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    command: >
-      postgres
-      -c shared_preload_libraries=pg_cron
-      -c cron.database_name=${POSTGRES_DB}
+      POSTGRES_USER: telemetry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-telemetry123}
+      POSTGRES_DB: telemetry
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db:/docker-entrypoint-initdb.d
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"    # 5433 щоб не конфліктувати з fleet postgres на 5432
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U telemetry -d telemetry"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
+    restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:latest
-    env_file:
-      - credentials.env
+  simulator:
+    build: .
+    command: python simulators/simulate_headless.py
+    env_file: .env
     environment:
-      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
-      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
-      GF_USERS_ALLOW_SIGN_UP: "false"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana:/etc/grafana/provisioning
-    ports:
-      - "3100:3000"
+      DB_HOST: postgres
+      DB_PORT: "5432"
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
-  # Симулятори модулів ICP DAS (для тестування без реального обладнання)
-  simulator_et7017_1:
-    build: ./simulators
-    command: python et7017_simulator.py 5020 1
-    ports:
-      - "5020:5020"
+  outbound:
+    build: .
+    command: python -m uvicorn outbound.main:app --host 0.0.0.0 --port 8001 --no-access-log
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
-      - modbus_net
-
-  simulator_et7017_2:
-    build: ./simulators
-    command: python et7017_simulator.py 5021 1
-    ports:
-      - "5021:5021"
-    networks:
-      - modbus_net
-
-  simulator_et7284:
-    build: ./simulators
-    command: python et7284_simulator.py 5022 1 1000
-    ports:
-      - "5022:5022"
-    networks:
-      - modbus_net
-
-  # collector та api — розкоментувати після реалізації
-  # collector:
-  #   build: ./collector
-  #   env_file:
-  #     - credentials.env
-  #   environment:
-  #     DB_HOST: ${DB_HOST}
-  #     DB_PORT: ${DB_PORT}
-  #     DB_NAME: ${DB_NAME}
-  #     DB_USER: ${DB_USER}
-  #     DB_PASSWORD: ${DB_PASSWORD}
-  #   volumes:
-  #     - ./config.txt:/app/config.txt:ro
-  #   depends_on:
-  #     timescaledb:
-  #       condition: service_healthy
-  #
-  # api:
-  #   build: ./api
-  #   env_file:
-  #     - credentials.env
-  #   environment:
-  #     DB_HOST: ${DB_HOST}
-  #     DB_PORT: ${DB_PORT}
-  #     DB_NAME: ${DB_NAME}
-  #     DB_USER: ${DB_USER}
-  #     DB_PASSWORD: ${DB_PASSWORD}
-  #   ports:
-  #     - "8100:8000"
-  #   depends_on:
-  #     timescaledb:
-  #       condition: service_healthy
+      default: {}
+      telemetry_net:
+        ipv4_address: 10.200.0.2    # фіксований IP — саме його реєструємо у fleet_server
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-  grafana_data:
 
 networks:
-  modbus_net:
-    driver: bridge
+  default: {}
+  telemetry_net:
+    name: telemetry_net
+    external: true

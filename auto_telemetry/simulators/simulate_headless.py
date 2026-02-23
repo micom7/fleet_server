@@ -1,24 +1,29 @@
 """
-Повноцінний симулятор телеметрії.
+Headless симулятор телеметрії — для Docker / серверного запуску.
 
 Що робить:
   • Ініціалізує channel_config та alarm_rules в telemetry DB (якщо порожні)
-  • Генерує реалістичні вимірювання кожні 2 с (18 каналів)
+  • Генерує реалістичні вимірювання кожні WRITE_INTERVAL_SEC секунд (18 каналів)
   • Генерує/закриває тривоги при перевищенні порогів
-  • Запускає Outbound API (uvicorn :8001) як підпроцес
-  • Виводить live-таблицю стану в терміналі
+  • Виводить статистику в лог кожні LOG_INTERVAL_SEC секунд
 
-Запуск (з кореня авто_telemetry/):
-    python simulators/test_server_minimal.py
+Відрізняється від test_server_minimal.py:
+  • Без термінального UI
+  • Не запускає Outbound API (запускається окремим сервісом у docker-compose)
+  • Логування через logging (stdout → docker logs)
+
+Env (з .env або docker-compose environment):
+  DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+  WRITE_INTERVAL_SEC  — інтервал запису (за замовч. 2)
+  LOG_INTERVAL_SEC    — інтервал статистики в лог (за замовч. 60)
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import os
 import random
-import socket
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -28,24 +33,34 @@ import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
-# ── ENV ───────────────────────────────────────────────────────────────────────
-
-_ROOT = Path(__file__).resolve().parent.parent   # auto_telemetry/
+_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / '.env')
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+    stream=sys.stdout,
+)
+log = logging.getLogger('simulator')
+
+WRITE_INTERVAL_SEC = float(os.getenv('WRITE_INTERVAL_SEC', '2'))
+LOG_INTERVAL_SEC   = float(os.getenv('LOG_INTERVAL_SEC', '60'))
+
+
+# ── DSN ───────────────────────────────────────────────────────────────────────
 
 def _dsn() -> str:
     return (
-        f"host={os.getenv('DB_HOST','localhost')} "
-        f"port={os.getenv('DB_PORT','5432')} "
-        f"dbname={os.getenv('DB_NAME','telemetry')} "
-        f"user={os.getenv('DB_USER','telemetry')} "
-        f"password={os.getenv('DB_PASSWORD','telemetry123')}"
+        f"host={os.getenv('DB_HOST', 'localhost')} "
+        f"port={os.getenv('DB_PORT', '5432')} "
+        f"dbname={os.getenv('DB_NAME', 'telemetry')} "
+        f"user={os.getenv('DB_USER', 'telemetry')} "
+        f"password={os.getenv('DB_PASSWORD', 'telemetry123')}"
     )
 
 
-# ── КАНАЛИ (channel_id, module, ch_idx, sig_type, name, unit,
-#            raw_min, raw_max, phys_min, phys_max) ────────────────────────────
+# ── КАНАЛИ ────────────────────────────────────────────────────────────────────
 
 CHANNELS: list[tuple] = [
     (1,  'et7017_1', 0, 'analog_420', 'Temp Engine',    'C',     6400, 32000,   0.0, 150.0),
@@ -68,8 +83,6 @@ CHANNELS: list[tuple] = [
     (18, 'et7284',   4, 'encoder_frequency', 'Speed',    'km/h', 0,   1000, 0.0,   50.0),
 ]
 
-# ── ПРАВИЛА ТРИВОГ (channel_id, name, rule_type, threshold, severity) ────────
-
 ALARM_RULES: list[tuple] = [
     (1,  'Engine overtemp',  'above', 130.0, 'critical'),
     (1,  'Engine high temp', 'above', 100.0, 'warning'),
@@ -80,22 +93,16 @@ ALARM_RULES: list[tuple] = [
 ]
 
 
-# ── СТАН СИМУЛЯТОРА ───────────────────────────────────────────────────────────
+# ── СТАН ──────────────────────────────────────────────────────────────────────
 
 class SimState:
-    sim_t:        float                    = 0.0    # секунди з початку симуляції
-    values:       dict[int, float]         = {}     # channel_id → поточне значення
-    total_rows:   int                      = 0
-    total_alarms: int                      = 0
-    active_alarms: dict[tuple, int]        = {}     # (rule_id, ch_id) → alarm_log_id
-    started_at:   float                    = 0.0
-    last_write:   datetime | None          = None
-    outbound_pid: int | None               = None
-
     def __init__(self) -> None:
-        self.values        = {}
-        self.active_alarms = {}
-        self.started_at    = time.monotonic()
+        self.sim_t:         float               = 0.0
+        self.values:        dict[int, float]    = {}
+        self.total_rows:    int                 = 0
+        self.total_alarms:  int                 = 0
+        self.active_alarms: dict[tuple, int]    = {}
+        self.started_at:    float               = time.monotonic()
 
 
 STATE = SimState()
@@ -104,15 +111,14 @@ STATE = SimState()
 # ── ГЕНЕРАЦІЯ ЗНАЧЕНЬ ─────────────────────────────────────────────────────────
 
 def _sim(ch: int, t: float) -> float:
-    """Повертає реалістичне фізичне значення для каналу."""
-    S = math.sin
+    S   = math.sin
     rng = random.gauss
     if ch == 1:  return 80  + 10 * S(t/120) + rng(0, 0.3)
     if ch == 2:  return 65  +  8 * S(t/150) + rng(0, 0.2)
     if ch == 3:  return 4.0 + 0.8 * S(t/30)  + rng(0, 0.05)
     if ch == 4:  return 3.5 + 0.3 * S(t/20)  + rng(0, 0.02)
     if ch == 5:  return 90  +  3 * S(t/200) + rng(0, 0.1)
-    if ch == 6:  return max(5.0, 80 - (t / 3600) * 15) + rng(0, 0.1)  # повільно витрачається
+    if ch == 6:  return max(5.0, 80 - (t / 3600) * 15) + rng(0, 0.1)
     if ch == 7:  return 13.8 + 0.3 * S(t/60)  + rng(0, 0.02)
     if ch == 8:  return 1500 + 80  * S(t/45)  + rng(0, 5)
     if ch in (9, 10):
@@ -123,7 +129,7 @@ def _sim(ch: int, t: float) -> float:
     if ch == 14: return 100 + 20  * S(t/35)  + rng(0, 0.5)
     if ch in (15, 16):
         return 20 + 8 * S(t/55 + (0 if ch == 15 else 1.2)) + rng(0, 0.1)
-    if ch == 17: return (t * 0.5) % 1000          # позиція 0.5 м/с
+    if ch == 17: return (t * 0.5) % 1000
     if ch == 18: return max(0, 10 + 5 * S(t/40) + rng(0, 0.2))
     return 0.0
 
@@ -142,7 +148,7 @@ def db_init() -> None:
                          name, unit, raw_min, raw_max, phys_min, phys_max)
                     VALUES %s ON CONFLICT DO NOTHING
                 """, [(c[0],c[1],c[2],c[3],c[4],c[5],c[6],c[7],c[8],c[9]) for c in CHANNELS])
-                print(f'  Created {len(CHANNELS)} channels')
+                log.info('Inserted %d channels', len(CHANNELS))
 
             cur.execute('SELECT COUNT(*) FROM alarm_rules')
             if cur.fetchone()[0] == 0:
@@ -152,7 +158,7 @@ def db_init() -> None:
                             (channel_id, name, rule_type, threshold, severity)
                         VALUES (%s,%s,%s,%s,%s)
                     """, (ch, name, rtype, thr, sev))
-                print(f'  Created {len(ALARM_RULES)} alarm rules')
+                log.info('Inserted %d alarm rules', len(ALARM_RULES))
         conn.commit()
     finally:
         conn.close()
@@ -175,7 +181,6 @@ def write_measurements(conn: psycopg2.extensions.connection) -> None:
         )
     conn.commit()
     STATE.total_rows += len(rows)
-    STATE.last_write  = now
 
 
 def check_alarms(conn: psycopg2.extensions.connection) -> None:
@@ -190,7 +195,7 @@ def check_alarms(conn: psycopg2.extensions.connection) -> None:
         val   = STATE.values.get(ch_id)
         if val is None:
             continue
-        key = (r['id'], ch_id)
+        key   = (r['id'], ch_id)
         fired = (
             (r['rule_type'] == 'above' and val > r['threshold']) or
             (r['rule_type'] == 'below' and val < r['threshold'])
@@ -207,6 +212,7 @@ def check_alarms(conn: psycopg2.extensions.connection) -> None:
                 STATE.active_alarms[key] = cur.fetchone()[0]
             conn.commit()
             STATE.total_alarms += 1
+            log.warning('ALARM triggered: %s', msg)
 
         elif not fired and key in STATE.active_alarms:
             alarm_id = STATE.active_alarms.pop(key)
@@ -214,79 +220,12 @@ def check_alarms(conn: psycopg2.extensions.connection) -> None:
                 cur.execute('UPDATE alarms_log SET resolved_at=%s WHERE id=%s',
                             (now, alarm_id))
             conn.commit()
-
-
-# ── ТЕРМІНАЛЬНИЙ ІНТЕРФЕЙС ────────────────────────────────────────────────────
-
-_ESC  = '\033['
-_CLR  = _ESC + '2J' + _ESC + 'H'   # clear screen + home
-_BOLD = _ESC + '1m'
-_RED  = _ESC + '91m'
-_YEL  = _ESC + '93m'
-_GRN  = _ESC + '92m'
-_CYN  = _ESC + '96m'
-_RST  = _ESC + '0m'
-
-
-def _bar(val: float, lo: float, hi: float, w: int = 14) -> str:
-    pct    = max(0.0, min(1.0, (val - lo) / (hi - lo) if hi != lo else 0))
-    filled = int(pct * w)
-    return '[' + '#' * filled + '-' * (w - filled) + ']'
-
-
-def render_ui() -> None:
-    up = int(time.monotonic() - STATE.started_at)
-    h, m, s = up // 3600, (up % 3600) // 60, up % 60
-    now_str  = datetime.now().strftime('%H:%M:%S')
-    n_active = len(STATE.active_alarms)
-
-    lines = [
-        _CLR,
-        (f'{_BOLD}{_CYN}=== Auto Telemetry Simulator ==={_RST}  '
-         f'{now_str}  uptime {h:02d}:{m:02d}:{s:02d}'),
-        (f'Outbound :8001  pid={STATE.outbound_pid or "ext"}  '
-         f'rows={_GRN}{STATE.total_rows}{_RST}  '
-         f'alarms={_RST}{STATE.total_alarms}  '
-         f'active={(_RED if n_active else _GRN)}{n_active}{_RST}'),
-        '',
-        (f'{_BOLD}{"ID":>3}  {"Channel":<16} {"Value":>9}  {"Unit":<6}  '
-         f'{"Bar":^16}  {"phys range"}{_RST}'),
-        '-' * 65,
-    ]
-
-    for c in CHANNELS:
-        ch_id, _, _, _, name, unit, _, _, lo, hi = c
-        val    = STATE.values.get(ch_id)
-        active = any(k[1] == ch_id for k in STATE.active_alarms)
-        col    = _RED if active else _RST
-        if val is None:
-            lines.append(f'{ch_id:>3}  {name:<16}  {"---":>9}  {unit:<6}')
-        else:
-            bar = _bar(val, lo, hi)
-            lines.append(
-                f'{col}{ch_id:>3}  {name:<16} {val:>9.2f}  {unit:<6}  '
-                f'{bar}  {lo:.0f}..{hi:.0f}{_RST}'
-            )
-
-    lines.append('')
-    if STATE.active_alarms:
-        lines.append(f'{_RED}{_BOLD}ACTIVE ALARMS:{_RST}')
-        ch_name = {c[0]: c[4] for c in CHANNELS}
-        for (_, ch_id), aid in list(STATE.active_alarms.items())[:6]:
-            val = STATE.values.get(ch_id, 0)
-            lines.append(f'  {_RED}[#{aid}] {ch_name.get(ch_id, f"ch{ch_id}")}: {val:.2f}{_RST}')
-    else:
-        lines.append(f'{_GRN}All systems normal{_RST}')
-
-    lines.append(f'\n{_CYN}Press Ctrl+C to stop{_RST}')
-    sys.stdout.write('\n'.join(lines))
-    sys.stdout.flush()
+            log.info('Alarm #%d resolved (ch=%d)', alarm_id, ch_id)
 
 
 # ── ASYNC TASKS ───────────────────────────────────────────────────────────────
 
-async def data_loop(interval: float = 2.0) -> None:
-    """Записує вимірювання та перевіряє тривоги кожні `interval` секунд."""
+async def data_loop(interval: float = WRITE_INTERVAL_SEC) -> None:
     conn = psycopg2.connect(_dsn())
     try:
         while True:
@@ -295,49 +234,26 @@ async def data_loop(interval: float = 2.0) -> None:
             check_alarms(conn)
             STATE.sim_t += interval
             elapsed = asyncio.get_event_loop().time() - t0
-            await asyncio.sleep(max(0.1, interval - elapsed))
+            await asyncio.sleep(max(0.05, interval - elapsed))
     finally:
         conn.close()
 
 
-async def ui_loop(refresh: float = 1.0) -> None:
-    """Оновлює термінал кожні `refresh` секунд."""
+async def stats_loop(interval: float = LOG_INTERVAL_SEC) -> None:
     while True:
-        render_ui()
-        await asyncio.sleep(refresh)
+        await asyncio.sleep(interval)
+        up = int(time.monotonic() - STATE.started_at)
+        h, m, s = up // 3600, (up % 3600) // 60, up % 60
+        log.info(
+            'uptime=%02d:%02d:%02d  rows=%d  alarms_total=%d  alarms_active=%d',
+            h, m, s, STATE.total_rows, STATE.total_alarms, len(STATE.active_alarms),
+        )
 
-
-# ── ЗАПУСК OUTBOUND API ───────────────────────────────────────────────────────
-
-def _port_busy(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(0.3)
-        return s.connect_ex(('127.0.0.1', port)) == 0
-
-
-def start_outbound() -> subprocess.Popen | None:
-    if _port_busy(8001):
-        print('  Outbound: port 8001 already in use — using existing server')
-        STATE.outbound_pid = None
-        return None
-
-    proc = subprocess.Popen(
-        [sys.executable, '-m', 'uvicorn', 'outbound.main:app',
-         '--host', '0.0.0.0', '--port', '8001', '--log-level', 'warning'],
-        cwd=str(_ROOT),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    STATE.outbound_pid = proc.pid
-    return proc
-
-
-# ── MAIN ──────────────────────────────────────────────────────────────────────
 
 async def async_main() -> None:
     tasks = [
         asyncio.create_task(data_loop()),
-        asyncio.create_task(ui_loop()),
+        asyncio.create_task(stats_loop()),
     ]
     try:
         await asyncio.gather(*tasks)
@@ -349,55 +265,41 @@ async def async_main() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def main() -> None:
-    # UTF-8 stdout + ANSI-коди на Windows
-    if sys.platform == 'win32':
-        import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        os.system('')
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 
-    print('Auto Telemetry Simulator')
-    print('========================')
-    print('Connecting to DB...', end=' ', flush=True)
-    try:
-        conn = psycopg2.connect(_dsn())
-        conn.close()
-        print('OK')
-    except Exception as e:
-        print(f'FAILED\n{e}')
+def main() -> None:
+    log.info('Auto Telemetry Headless Simulator starting')
+    log.info('DB: %s', _dsn())
+
+    # Чекаємо БД (корисно при старті Docker — postgres може ще ініціалізуватись)
+    for attempt in range(30):
+        try:
+            conn = psycopg2.connect(_dsn())
+            conn.close()
+            log.info('DB connection OK')
+            break
+        except Exception as e:
+            log.warning('DB not ready (attempt %d/30): %s', attempt + 1, e)
+            time.sleep(2)
+    else:
+        log.error('DB connection failed after 30 attempts — exiting')
         sys.exit(1)
 
-    print('Initializing schema...', end=' ', flush=True)
+    log.info('Initializing channel config and alarm rules...')
     try:
         db_init()
-        print('OK')
     except Exception as e:
-        print(f'FAILED\n{e}')
+        log.error('DB init failed: %s', e)
         sys.exit(1)
 
-    print('Starting Outbound API...', end=' ', flush=True)
-    proc = start_outbound()
-    if proc:
-        time.sleep(1.2)   # чекаємо поки uvicorn підніметься
-        print(f'OK  (pid={proc.pid})')
-    else:
-        print('skipped (already running)')
-
-    print('Starting simulator...\n')
-    time.sleep(0.3)
-
+    log.info(
+        'Starting simulation: %d channels, interval=%.1fs, log_interval=%.0fs',
+        len(CHANNELS), WRITE_INTERVAL_SEC, LOG_INTERVAL_SEC,
+    )
     try:
         asyncio.run(async_main())
     except KeyboardInterrupt:
-        pass
-    finally:
-        if proc:
-            proc.terminate()
-            try:
-                proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        print('\n\nSimulator stopped.')
+        log.info('Simulator stopped')
 
 
 if __name__ == '__main__':
