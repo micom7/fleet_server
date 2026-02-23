@@ -8,23 +8,26 @@ services:
     image: postgres:16
     env_file: .env
     environment:
-      POSTGRES_USER: ${DB_USER}
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+      FLEET_APP_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./db/:/docker-entrypoint-initdb.d/:ro
     ports:
       - "127.0.0.1:5432:5432"    # ← тільки localhost, НЕ "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
   api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     env_file: .env
     ports:
       - "127.0.0.1:8000:8000"    # ← тільки localhost, nginx проксує

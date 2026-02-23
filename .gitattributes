@@ -1,0 +1,19 @@
+# Shell скрипти — завжди LF (для Linux)
+*.sh text eol=lf
+
+# Python — завжди LF
+*.py text eol=lf
+
+# SQL — завжди LF
+*.sql text eol=lf
+
+# Конфіги — завжди LF
+*.conf text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.env text eol=lf
+*.env.example text eol=lf
+
+# Markdown і текст — автоматично
+*.md text
+*.txt text
