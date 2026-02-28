@@ -262,8 +262,10 @@ def alarms(
                     al.resolved_at
                 FROM alarms_log al
                 LEFT JOIN alarm_rules ar ON ar.id = al.rule_id
-                WHERE al.triggered_at >= %(from_)s
-                  AND al.triggered_at <  %(to)s
+                WHERE (
+                    al.triggered_at >= %(from_)s AND al.triggered_at < %(to)s
+                    OR al.resolved_at >= %(from_)s AND al.resolved_at < %(to)s
+                )
                 {extra}
                 ORDER BY al.triggered_at ASC
             """, {'from_': from_, 'to': to})
