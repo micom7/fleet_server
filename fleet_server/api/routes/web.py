@@ -312,6 +312,7 @@ def admin_page(
     request: Request,
     tab: str = "users",
     error: str | None = None,
+    delete_error: str | None = None,
     access_token: str | None = Cookie(default=None),
 ):
     user = _user_from_cookie(access_token)
@@ -329,7 +330,7 @@ def admin_page(
             users = [dict(r) for r in cur.fetchall()]
 
             cur.execute(
-                "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, last_seen_at, sync_status "
+                "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, api_key, last_seen_at, sync_status "
                 "FROM vehicles ORDER BY name"
             )
             vehicles = [dict(r) for r in cur.fetchall()]
@@ -351,6 +352,7 @@ def admin_page(
         "active_owners": active_owners,
         "tab": tab,
         "error": error,
+        "delete_error": delete_error,
         "active": "admin",
     })
 
@@ -418,7 +420,7 @@ def _vehicle_row_context(vehicle_id: str, user_id: str, user_role: str) -> dict:
     with get_conn(user_id, user_role) as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, sync_status "
+                "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, api_key, sync_status "
                 "FROM vehicles WHERE id = %s",
                 (vehicle_id,),
             )
@@ -466,6 +468,7 @@ def web_add_vehicle(
     name: str = Form(...),
     vpn_ip: str = Form(...),
     api_port: int = Form(default=8001),
+    api_key: str = Form(default=""),
     access_token: str | None = Cookie(default=None),
 ):
     cu = _user_from_cookie(access_token)
@@ -475,10 +478,60 @@ def web_add_vehicle(
         with get_conn(str(cu.id), cu.role) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO vehicles (name, vpn_ip, api_port) "
-                    "VALUES (%s, %s::inet, %s)",
-                    (name.strip(), vpn_ip.strip(), api_port),
+                    "INSERT INTO vehicles (name, vpn_ip, api_port, api_key) "
+                    "VALUES (%s, %s::inet, %s, %s)",
+                    (name.strip(), vpn_ip.strip(), api_port, api_key.strip() or None),
                 )
+    except Exception:
+        return RedirectResponse(url="/admin?tab=vehicles&error=1", status_code=302)
+    return RedirectResponse(url="/admin?tab=vehicles", status_code=302)
+
+
+@router.post("/web/admin/vehicles/{vehicle_id}/edit")
+def web_edit_vehicle(
+    vehicle_id: str,
+    name: str = Form(...),
+    vpn_ip: str = Form(...),
+    api_port: int = Form(default=8001),
+    api_key: str = Form(default=""),
+    access_token: str | None = Cookie(default=None),
+):
+    cu = _user_from_cookie(access_token)
+    if not cu or cu.role != "superuser":
+        return RedirectResponse(url="/login", status_code=302)
+    try:
+        with get_conn(str(cu.id), cu.role) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE vehicles SET name=%s, vpn_ip=%s::inet, api_port=%s, api_key=%s "
+                    "WHERE id=%s",
+                    (name.strip(), vpn_ip.strip(), api_port, api_key.strip() or None, vehicle_id),
+                )
+    except Exception:
+        return RedirectResponse(url="/admin?tab=vehicles&error=1", status_code=302)
+    return RedirectResponse(url="/admin?tab=vehicles", status_code=302)
+
+
+@router.post("/web/admin/vehicles/{vehicle_id}/delete")
+def web_delete_vehicle(
+    vehicle_id: str,
+    password: str = Form(...),
+    access_token: str | None = Cookie(default=None),
+):
+    cu = _user_from_cookie(access_token)
+    if not cu or cu.role != "superuser":
+        return RedirectResponse(url="/login", status_code=302)
+    with get_conn(str(cu.id), cu.role) as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT password_hash FROM users WHERE id = %s", (str(cu.id),))
+            row = cur.fetchone()
+    if not row or not verify_password(password, row["password_hash"]):
+        return RedirectResponse(url="/admin?tab=vehicles&delete_error=1", status_code=302)
+    try:
+        with get_conn(str(cu.id), cu.role) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM vehicle_access WHERE vehicle_id = %s", (vehicle_id,))
+                cur.execute("DELETE FROM vehicles WHERE id = %s", (vehicle_id,))
     except Exception:
         return RedirectResponse(url="/admin?tab=vehicles&error=1", status_code=302)
     return RedirectResponse(url="/admin?tab=vehicles", status_code=302)

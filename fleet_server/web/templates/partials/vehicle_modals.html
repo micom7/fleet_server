@@ -1,0 +1,68 @@
+<!-- Edit Modal for {{ v.name }} -->
+<div class="modal fade" id="editModal-{{ v.id }}" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form method="post" action="/web/admin/vehicles/{{ v.id }}/edit">
+        <div class="modal-header">
+          <h5 class="modal-title">Редагувати авто</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="small text-muted">Назва</label>
+            <input type="text" name="name" required value="{{ v.name }}"
+                   class="form-control form-control-sm">
+          </div>
+          <div class="form-group">
+            <label class="small text-muted">VPN IP</label>
+            <input type="text" name="vpn_ip" required value="{{ v.vpn_ip }}"
+                   class="form-control form-control-sm" style="font-family:monospace">
+          </div>
+          <div class="form-group">
+            <label class="small text-muted">API порт</label>
+            <input type="number" name="api_port" required value="{{ v.api_port }}"
+                   class="form-control form-control-sm" style="width:100px">
+          </div>
+          <div class="form-group">
+            <label class="small text-muted">API ключ
+              <span class="text-muted">(порожньо = загальний ключ)</span>
+            </label>
+            <input type="text" name="api_key" value="{{ v.api_key if v.api_key else '' }}"
+                   placeholder="залишити порожнім для ключа за замовчуванням"
+                   class="form-control form-control-sm" style="font-family:monospace">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Скасувати</button>
+          <button type="submit" class="btn btn-primary btn-sm">Зберегти</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal for {{ v.name }} -->
+<div class="modal fade" id="deleteModal-{{ v.id }}" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-sm" role="document">
+    <div class="modal-content">
+      <form method="post" action="/web/admin/vehicles/{{ v.id }}/delete">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title">Видалити «{{ v.name }}»?</h5>
+          <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">Ця дія незворотна. Всі записи доступу будуть видалені.</p>
+          <div class="form-group mb-0">
+            <label class="small text-muted">Пароль адміна для підтвердження</label>
+            <input type="password" name="password" required
+                   class="form-control form-control-sm" placeholder="••••••••">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Скасувати</button>
+          <button type="submit" class="btn btn-danger btn-sm">Видалити</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

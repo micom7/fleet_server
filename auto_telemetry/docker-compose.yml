@@ -5,7 +5,7 @@
 #   - Перед першим запуском: docker network create --subnet 10.200.0.0/24 telemetry_net
 #
 # Реєструй авто у fleet_server admin:
-#   vpn_ip   = 10.200.0.2
+#   vpn_ip   = 10.200.0.50
 #   api_port = 8001
 #   api_key  = значення OUTBOUND_API_KEY з .env
 #
@@ -58,7 +58,7 @@ services:
     networks:
       default: {}
       telemetry_net:
-        ipv4_address: 10.200.0.2    # фіксований IP — саме його реєструємо у fleet_server
+        ipv4_address: 10.200.0.50   # фіксований IP — саме його реєструємо у fleet_server
     restart: unless-stopped
 
 volumes:

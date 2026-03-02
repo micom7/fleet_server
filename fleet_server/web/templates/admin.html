@@ -29,7 +29,14 @@
 {% if error %}
 <div class="alert alert-danger alert-dismissible">
   <i class="fas fa-exclamation-circle mr-1"></i>
-  Помилка при додаванні авто. Перевірте правильність VPN IP.
+  Помилка. Перевірте правильність VPN IP та інших полів.
+  <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+</div>
+{% endif %}
+{% if delete_error %}
+<div class="alert alert-danger alert-dismissible">
+  <i class="fas fa-lock mr-1"></i>
+  Неправильний пароль адміна. Авто не видалено.
   <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
 </div>
 {% endif %}
@@ -66,7 +73,7 @@
     <table class="table table-hover mb-0">
       <thead class="thead-light">
         <tr>
-          <th>Назва</th><th>VPN IP</th><th>Синхронізація</th><th>Власники</th><th>Призначити</th>
+          <th>Назва</th><th>VPN IP</th><th>Синхронізація</th><th>Власники</th><th>Призначити</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -78,6 +85,10 @@
     {% endif %}
   </div>
 </div>
+
+{% for v in vehicles %}
+{% include "partials/vehicle_modals.html" %}
+{% endfor %}
 
 <!-- Додати авто -->
 <div class="card">
@@ -95,6 +106,10 @@
       <div class="form-group mr-2">
         <label class="mr-1 small text-muted">Порт</label>
         <input type="number" name="api_port" value="8001" class="form-control form-control-sm" style="width:80px">
+      </div>
+      <div class="form-group mr-2">
+        <label class="mr-1 small text-muted">API ключ</label>
+        <input type="text" name="api_key" placeholder="залишити порожнім" class="form-control form-control-sm" style="font-family:monospace;width:200px">
       </div>
       <button type="submit" class="btn btn-success btn-sm">
         <i class="fas fa-plus mr-1"></i> Додати

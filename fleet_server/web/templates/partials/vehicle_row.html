@@ -38,4 +38,14 @@
       <button type="submit" class="btn btn-sm btn-primary">Призначити</button>
     </form>
   </td>
+  <td class="text-nowrap">
+    <button class="btn btn-sm btn-outline-secondary mr-1"
+            data-toggle="modal" data-target="#editModal-{{ v.id }}">
+      <i class="fas fa-edit"></i>
+    </button>
+    <button class="btn btn-sm btn-outline-danger"
+            data-toggle="modal" data-target="#deleteModal-{{ v.id }}">
+      <i class="fas fa-trash"></i>
+    </button>
+  </td>
 </tr>

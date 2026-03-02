@@ -3,7 +3,7 @@
 ## Сервер
 - **IP**: `89.167.89.108`
 - **Домен**: `autotelemetry.duckdns.org`
-- **SSH**: `ssh -i /c/Users/ogagi/.ssh/id_ed25519 root@89.167.89.108`
+- **SSH**: `ssh -i /c/Users/Dell/.ssh/id_ed25519 root@89.167.89.108`
 
 ## Fleet Server (Docker)
 - **Директорія**: `/opt/fleet_server/fleet_server/`
