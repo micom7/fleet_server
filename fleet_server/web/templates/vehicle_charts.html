@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Графіки — {{ vehicle.name }}{% endblock %}
+
+{% block page_header %}
+<div class="row mb-2">
+  <div class="col-sm-8">
+    <ol class="breadcrumb float-sm-left">
+      <li class="breadcrumb-item"><a href="/fleet">Автопарк</a></li>
+      <li class="breadcrumb-item"><a href="/vehicles/{{ vehicle.id }}">{{ vehicle.name }}</a></li>
+      <li class="breadcrumb-item active">Графіки</li>
+    </ol>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card card-primary card-outline">
+  <div class="card-header">
+    <h5 class="card-title m-0"><i class="fas fa-chart-line mr-2"></i>{{ vehicle.name }} — вибір параметрів</h5>
+  </div>
+  <div class="card-body">
+    <div class="row align-items-end">
+      <div class="col-md-10">
+        <label class="font-weight-bold mb-2">Параметри:</label>
+        <div class="row">
+          {% for ch in channels %}
+          <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="form-check">
+              <input class="form-check-input grafana-channel" type="checkbox"
+                     value="{{ ch.channel_id }}" id="ch_{{ ch.channel_id }}">
+              <label class="form-check-label" for="ch_{{ ch.channel_id }}">
+                {{ ch.name }}{% if ch.unit %} <small class="text-muted">({{ ch.unit }})</small>{% endif %}
+              </label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="col-md-2 mt-3 mt-md-0">
+        <button class="btn btn-primary btn-block" onclick="showGrafana()">
+          <i class="fas fa-play mr-1"></i> Показати
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="grafana-placeholder" class="card">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="fas fa-chart-area fa-3x mb-3"></i>
+    <p>Виберіть параметри та натисніть «Показати»</p>
+  </div>
+</div>
+
+<div id="grafana-frame-wrap" style="display:none">
+  <iframe id="grafana-frame"
+          src=""
+          width="100%"
+          style="height: calc(100vh - 280px); min-height: 500px; border:1px solid #dee2e6; border-radius:4px"
+          frameborder="0">
+  </iframe>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showGrafana() {
+  const selected = [...document.querySelectorAll('.grafana-channel:checked')].map(c => c.value);
+  if (!selected.length) { alert('Виберіть хоча б один параметр'); return; }
+  const params = new URLSearchParams();
+  params.set('orgId', '1');
+  params.set('from', 'now-1h');
+  params.set('to', 'now');
+  params.set('theme', 'light');
+  selected.forEach(id => params.append('var-channel', id));
+  const url = '/grafana/d/vehicle-multi/vehicle-multi-metric?' + params.toString();
+  document.getElementById('grafana-frame').src = url;
+  document.getElementById('grafana-placeholder').style.display = 'none';
+  document.getElementById('grafana-frame-wrap').style.display = 'block';
+}
+</script>
+{% endblock %}

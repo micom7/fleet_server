@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from database import get_conn
 from dependencies import AuthUser, get_current_user
 
-router = APIRouter(prefix="/vehicles", tags=["vehicles"])
+router = APIRouter(prefix="/api/vehicles", tags=["vehicles"])
 
 
 @router.get("")

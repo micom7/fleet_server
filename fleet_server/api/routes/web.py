@@ -78,7 +78,7 @@ def _get_vehicle(vehicle_id: str, user: AuthUser) -> dict | None:
             if user.role == "owner":
                 cur.execute(
                     "SELECT v.id, v.name, host(v.vpn_ip) AS vpn_ip, v.api_port, "
-                    "v.last_seen_at, v.sync_status "
+                    "v.last_seen_at, v.last_sync_at, v.sync_status, v.software_version "
                     "FROM vehicles v "
                     "JOIN vehicle_access va ON va.vehicle_id = v.id "
                     "WHERE v.id = %s AND va.user_id = %s",
@@ -86,7 +86,8 @@ def _get_vehicle(vehicle_id: str, user: AuthUser) -> dict | None:
                 )
             else:
                 cur.execute(
-                    "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, last_seen_at, sync_status "
+                    "SELECT id, name, host(vpn_ip) AS vpn_ip, api_port, "
+                    "last_seen_at, last_sync_at, sync_status, software_version "
                     "FROM vehicles WHERE id = %s",
                     (vehicle_id,),
                 )
@@ -97,6 +98,17 @@ def _get_vehicle(vehicle_id: str, user: AuthUser) -> dict | None:
     last_seen = r["last_seen_at"]
     r["online"] = bool(last_seen and (now - last_seen).total_seconds() < 120)
     return r
+
+
+def _get_channels(vehicle_id: str, user: AuthUser) -> list[dict]:
+    with get_conn(str(user.id), user.role) as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT channel_id, name, unit FROM channel_config "
+                "WHERE vehicle_id = %s ORDER BY channel_id",
+                (vehicle_id,),
+            )
+            return [dict(r) for r in cur.fetchall()]
 
 
 def _get_alarms(vehicle_id: str, user: AuthUser) -> list[dict]:
@@ -286,6 +298,28 @@ def vehicle_page(
         "user": user,
         "vehicle": vehicle,
         "alarms": _get_alarms(vehicle_id, user),
+        "channels": _get_channels(vehicle_id, user),
+        "active": "fleet",
+    })
+
+
+@router.get("/vehicles/{vehicle_id}/charts")
+def vehicle_charts_page(
+    request: Request,
+    vehicle_id: str,
+    access_token: str | None = Cookie(default=None),
+):
+    user = _user_from_cookie(access_token)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    vehicle = _get_vehicle(vehicle_id, user)
+    if not vehicle:
+        return RedirectResponse(url="/fleet", status_code=302)
+    return templates.TemplateResponse("vehicle_charts.html", {
+        "request": request,
+        "user": user,
+        "vehicle": vehicle,
+        "channels": _get_channels(vehicle_id, user),
         "active": "fleet",
     })
 

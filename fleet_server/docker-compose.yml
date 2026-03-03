@@ -59,12 +59,18 @@ services:
       GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
       GF_AUTH_PROXY_HEADER_PROPERTY: username
       GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_SERVER_ROOT_URL: "https://autotelemetry.duckdns.org/grafana/"
       GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "127.0.0.1:3000:3000"    # ← тільки localhost, nginx проксує
+    networks:
+      - default
+      - telemetry_net    # доступ до telemetry БД для Grafana datasource
     depends_on:
       postgres:
         condition: service_healthy
