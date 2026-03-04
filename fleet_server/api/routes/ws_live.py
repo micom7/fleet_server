@@ -30,11 +30,11 @@ def _check_access(user_id: str, user_role: str, vehicle_id: str) -> bool:
 
 
 def _get_vehicle_addr(vehicle_id: str, user_id: str, user_role: str) -> dict | None:
-    """Повертає {vpn_ip, api_port} або None якщо не знайдено."""
+    """Повертає {vpn_ip, api_port, api_key} або None якщо не знайдено."""
     with get_conn(user_id, user_role) as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT host(vpn_ip) AS vpn_ip, api_port FROM vehicles WHERE id = %s",
+                "SELECT host(vpn_ip) AS vpn_ip, api_port, api_key FROM vehicles WHERE id = %s",
                 (vehicle_id,),
             )
             row = cur.fetchone()
@@ -80,12 +80,13 @@ async def ws_live(
     await websocket.accept()
 
     vehicle_url = f"http://{vehicle['vpn_ip']}:{vehicle['api_port']}/data/latest"
+    headers = {"X-Api-Key": vehicle["api_key"]} if vehicle.get("api_key") else {}
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             while True:
                 try:
-                    resp = await client.get(vehicle_url)
+                    resp = await client.get(vehicle_url, headers=headers)
                     resp.raise_for_status()
                     data = {"status": "online", "data": resp.json()}
                 except (httpx.RequestError, httpx.HTTPStatusError):
