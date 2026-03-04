@@ -14,14 +14,13 @@
 {% endblock %}
 
 {% block content %}
-<div class="card card-primary card-outline">
-  <div class="card-header">
+<div id="selector-card" class="card card-primary card-outline mb-2">
+  <div class="card-header py-2">
     <h5 class="card-title m-0"><i class="fas fa-chart-line mr-2"></i>{{ vehicle.name }} — вибір параметрів</h5>
   </div>
-  <div class="card-body">
-    <div class="row align-items-end">
+  <div class="card-body py-2">
+    <div class="row align-items-center">
       <div class="col-md-10">
-        <label class="font-weight-bold mb-2">Параметри:</label>
         <div class="row">
           {% for ch in channels %}
           <div class="col-sm-6 col-md-4 col-lg-3">
@@ -36,7 +35,7 @@
           {% endfor %}
         </div>
       </div>
-      <div class="col-md-2 mt-3 mt-md-0">
+      <div class="col-md-2 mt-2 mt-md-0">
         <button class="btn btn-primary btn-block" onclick="showGrafana()">
           <i class="fas fa-play mr-1"></i> Показати
         </button>
@@ -53,12 +52,8 @@
 </div>
 
 <div id="grafana-frame-wrap" style="display:none">
-  <iframe id="grafana-frame"
-          src=""
-          width="100%"
-          style="height: calc(100vh - 280px); min-height: 500px; border:1px solid #dee2e6; border-radius:4px"
-          frameborder="0">
-  </iframe>
+  <iframe id="grafana-frame" src="" width="100%" frameborder="0"
+          style="height:92vh; border:1px solid #dee2e6; border-radius:4px; display:block"></iframe>
 </div>
 {% endblock %}
 
@@ -72,6 +67,7 @@ function showGrafana() {
   params.set('from', 'now-1h');
   params.set('to', 'now');
   params.set('theme', 'light');
+  params.set('kiosk', '1');
   selected.forEach(id => params.append('var-channel', id));
   const url = '/grafana/d/vehicle-multi/vehicle-multi-metric?' + params.toString();
   document.getElementById('grafana-frame').src = url;
