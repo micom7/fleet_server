@@ -191,13 +191,33 @@ def start():
 - Перевіряє PIN
 - Запускає `apply_update()` у фоновому потоці
 
+`apply_update()` — послідовність з атомарним відкатом:
+
+```
+1. verify     — перевірити підпис пакету ще раз (захист від підміни файлу на диску)
+2. backup     — створити backups/backup_vX.Y.Z_<timestamp>.zip (поточний стан)
+3. patch      — замінити файли з files/ (не чіпати захищені файли)
+4. write_ver  — записати нову версію у version.txt
+5. migrate    — виконати SQL-міграції з migrations/ по порядку (за іменем файлу)
+6. flag       — видалити restart.flag якщо є, створити новий
+               (видалення ПЕРЕД записом — watchdog не зациклюється при краші)
+
+При будь-якій помилці на кроках 3-5:
+  → restore backup (розпакувати резервну копію)
+  → записати failure у agent/update_log.jsonl
+  → надіслати SSE: {"step": "failed", "msg": "..."}
+  → НЕ ставити restart.flag
+```
+
 #### `GET /api/update/progress` (SSE)
 ```
-data: {"step": "verify",   "pct": 20, "msg": "Перевірка пакету..."}
-data: {"step": "backup",   "pct": 40, "msg": "Резервна копія..."}
-data: {"step": "patch",    "pct": 70, "msg": "Застосування файлів..."}
-data: {"step": "migrate",  "pct": 90, "msg": "Міграція БД..."}
+data: {"step": "verify",   "pct": 15, "msg": "Перевірка пакету..."}
+data: {"step": "backup",   "pct": 30, "msg": "Резервна копія..."}
+data: {"step": "patch",    "pct": 60, "msg": "Застосування файлів..."}
+data: {"step": "version",  "pct": 70, "msg": "Запис версії..."}
+data: {"step": "migrate",  "pct": 85, "msg": "Міграція БД..."}
 data: {"step": "done",     "pct": 100,"msg": "Перезапуск..."}
+data: {"step": "failed",   "pct": 0,  "msg": "Помилка: <деталі>. Відновлено резервну копію."}
 ```
 
 **UI у порталі:**
@@ -210,18 +230,31 @@ data: {"step": "done",     "pct": 100,"msg": "Перезапуск..."}
 
 ### `watchdog.py`
 
-Запускає три процеси:
+Запускає чотири процеси (з урахуванням outbound):
 
 ```
 watchdog.py
 ├── collector/main.py    ← перезапускає при падінні
 ├── portal (port 8000)   ← перезапускає при падінні
+├── outbound (port 8001) ← перезапускає при падінні
 └── agent  (port 9876)   ← перезапускає при падінні
 
-Стежить за restart.flag → graceful restart всіх трьох
+Стежить за restart.flag → graceful restart всіх чотирьох
 ```
 
 Перевірка ліцензії — один раз у watchdog при старті.
+
+**Логіка `restart.flag`:**
+```python
+# watchdog.py — головний цикл
+flag = Path("restart.flag")
+if flag.exists():
+    flag.unlink()          # видалити ДО перезапуску
+    restart_all_services() # якщо тут крашнеться — прапора вже немає, немає циклу
+```
+
+> Прапор видаляється **перед** перезапуском, а не після. При краші watchdog під час
+> перезапуску прапор не збережеться — немає ризику нескінченного restart-циклу.
 
 ---
 
@@ -268,7 +301,8 @@ update_v1.2.0.zip
 ```
 
 **Що ніколи не замінюється:**
-`license/_core.pyd`, `license/__init__.py`, `license.dat`, `config.txt`, `credentials.env`
+`license/_core.pyd`, `license/__init__.py`, `license.dat`, `config.txt`, `credentials.env`,
+`agent/cert.pem`, `agent/key.pem` (TLS-сертифікат агента унікальний для кожної машини)
 
 ---
 
@@ -331,12 +365,19 @@ httpx>=0.27      # HTTP-клієнт у server_tools/sync_client.py (на сер
 
 ## Файли, що змінюються в існуючому коді
 
-| Файл              | Зміна                                                     |
-|-------------------|-----------------------------------------------------------|
-| `portal/main.py`  | +3 ендпоінти (status / apply / progress) + SSE-черга     |
-| `watchdog.py`     | +запуск agent як третього процесу                        |
-| `config.txt`      | +AGENT_PORT, AGENT_CERT_FILE, AGENT_KEY_FILE             |
-| `requirements.txt`| без змін (httpx тільки на сервері)                       |
+| Файл              | Зміна                                                           |
+|-------------------|-----------------------------------------------------------------|
+| `portal/main.py`  | +3 ендпоінти (status / apply / progress) + SSE-черга           |
+| `watchdog.py`     | +запуск agent і outbound як 3-го і 4-го процесів               |
+| `config.txt`      | +AGENT_PORT, AGENT_CERT_FILE, AGENT_KEY_FILE, OUTBOUND_PORT    |
+| `requirements.txt`| без змін (httpx тільки на сервері)                             |
+
+**Нові файли:**
+
+| Файл                    | Призначення                                            |
+|-------------------------|--------------------------------------------------------|
+| `version.txt`           | поточна версія, читається `/status` і `incoming_update.py` |
+| `agent/update_log.jsonl`| журнал всіх спроб оновлень (успіх/невдача, версія, час) |
 
 ---
 
@@ -355,9 +396,28 @@ httpx>=0.27      # HTTP-клієнт у server_tools/sync_client.py (на сер
 
 [Оператор підтверджує]
     portal UI → "Отримано v1.2.0" → "Застосувати"
-    → backup → patch → migrate → restart.flag
+    → verify → backup → patch → write version.txt → migrate
+    → при помилці: restore backup, SSE "failed", зупинитись
+    → при успіху: restart.flag (видаляємо старий якщо є, пишемо новий)
+                  SSE "done"
 
 [Watchdog]
-    → перезапуск collector + portal + agent
+    → виявляє restart.flag
+    → flag.unlink()  ← видаляємо ДО перезапуску
+    → перезапуск collector + portal + outbound + agent
     → UI авто-релоад → нова версія працює
+    → /status повертає нову version.txt → fleet_server оновлює vehicles.software_version
 ```
+
+---
+
+## Журнал оновлень (`agent/update_log.jsonl`)
+
+Кожна спроба оновлення дописує один JSON-рядок:
+
+```json
+{"time": "2026-02-22T10:10:00Z", "from_version": "1.1.0", "to_version": "1.2.0", "status": "ok"}
+{"time": "2026-02-23T09:00:00Z", "from_version": "1.2.0", "to_version": "1.3.0", "status": "failed", "error": "migration 0013: column already exists"}
+```
+
+Не ротується автоматично — для парку 10 машин зростає повільно (рядок на оновлення).
