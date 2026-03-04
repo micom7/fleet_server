@@ -114,7 +114,7 @@ def login(body: UserLogin, request: Request, response: Response) -> TokenOut:
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=False,   # True в продакшні
+        secure=settings.cookie_secure,
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
         path="/auth/refresh",
@@ -201,7 +201,7 @@ def google_login(response: Response) -> RedirectResponse:
     if not settings.google_client_id:
         raise HTTPException(status_code=501, detail="Google OAuth не налаштовано")
     state = secrets.token_urlsafe(16)
-    response.set_cookie("oauth_state", state, httponly=True, secure=False, max_age=300)
+    response.set_cookie("oauth_state", state, httponly=True, secure=settings.cookie_secure, max_age=300)
     return RedirectResponse(url=google_auth_url(state))
 
 
@@ -276,7 +276,7 @@ async def google_callback(
         key="refresh_token",
         value=refresh_token_val,
         httponly=True,
-        secure=False,
+        secure=settings.cookie_secure,
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
         path="/auth/refresh",

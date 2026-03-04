@@ -31,7 +31,8 @@ class Settings:
     google_redirect_uri:  str = os.getenv("GOOGLE_REDIRECT_URI", "")
 
     # ── App ──────────────────────────────────────────────────────────
-    base_url: str = os.getenv("BASE_URL", "http://localhost:8000")
+    base_url:      str  = os.getenv("BASE_URL", "http://localhost:8000")
+    cookie_secure: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 
     # ── SMTP ─────────────────────────────────────────────────────────
     smtp_host:     str = os.getenv("SMTP_HOST", "")
