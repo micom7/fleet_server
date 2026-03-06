@@ -117,7 +117,7 @@ def login(body: UserLogin, request: Request, response: Response) -> TokenOut:
         secure=settings.cookie_secure,
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
-        path="/auth/refresh",
+        path="/auth",
     )
     return TokenOut(access_token=access_token)
 
@@ -177,7 +177,7 @@ def logout(
         except Exception:
             pass  # Не падаємо — просто видаляємо cookie
 
-    response.delete_cookie(key="refresh_token", path="/auth/refresh")
+    response.delete_cookie(key="refresh_token", path="/auth")
     return {"message": "Вихід виконано"}
 
 
@@ -279,6 +279,6 @@ async def google_callback(
         secure=settings.cookie_secure,
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
-        path="/auth/refresh",
+        path="/auth",
     )
     return TokenOut(access_token=access_token)

@@ -23,6 +23,9 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options: {max-size: "10m", max-file: "3"}
 
   api:
     build:
@@ -38,6 +41,9 @@ services:
       - default
       - telemetry_net    # доступ до outbound API авто для live WebSocket
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options: {max-size: "10m", max-file: "3"}
 
   sync:
     build: ./sync
@@ -50,6 +56,9 @@ services:
       - default
       - telemetry_net    # доступ до outbound API симулятора (10.200.0.2:8001)
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options: {max-size: "10m", max-file: "3"}
 
   grafana:
     image: grafana/grafana:latest
@@ -78,6 +87,9 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options: {max-size: "10m", max-file: "3"}
 
   nginx:
     image: nginx:alpine
@@ -91,6 +103,9 @@ services:
       - api
       - grafana
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options: {max-size: "10m", max-file: "3"}
 
 volumes:
   postgres_data:

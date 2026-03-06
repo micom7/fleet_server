@@ -1,4 +1,5 @@
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,5 +42,16 @@ class Settings:
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_from:     str = os.getenv("SMTP_FROM", "")
 
+    def validate(self) -> None:
+        required = {
+            "DB_PASSWORD": self.db_password,
+            "JWT_SECRET":  self.jwt_secret,
+        }
+        missing = [name for name, val in required.items() if not val]
+        if missing:
+            print(f"[FATAL] Відсутні обов'язкові змінні середовища: {', '.join(missing)}", flush=True)
+            sys.exit(1)
+
 
 settings = Settings()
+settings.validate()
