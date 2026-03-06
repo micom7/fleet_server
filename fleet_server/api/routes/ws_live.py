@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from uuid import UUID
 
 import httpx
@@ -7,11 +8,28 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from jose import JWTError
 
 from auth import decode_token
+from config import settings
 from database import get_conn
 
 router = APIRouter(tags=["websocket"])
 
 POLL_INTERVAL = 2.0  # секунди між опитуваннями авто
+
+
+def _data_status(rows: list) -> str:
+    """'online' якщо є свіжі дані, 'stale' якщо дані застарілі."""
+    if not rows:
+        return "stale"
+    now = datetime.now(timezone.utc)
+    latest = max(
+        (r.get("time") for r in rows if r.get("time")),
+        default=None,
+    )
+    if latest is None:
+        return "stale"
+    ts = datetime.fromisoformat(latest.replace("Z", "+00:00"))
+    age = (now - ts).total_seconds()
+    return "online" if age <= settings.live_stale_threshold_sec else "stale"
 
 
 def _check_access(user_id: str, user_role: str, vehicle_id: str) -> bool:
@@ -88,7 +106,8 @@ async def ws_live(
                 try:
                     resp = await client.get(vehicle_url, headers=headers)
                     resp.raise_for_status()
-                    data = {"status": "online", "data": resp.json()}
+                    rows = resp.json()
+                    data = {"status": _data_status(rows), "data": rows}
                 except (httpx.RequestError, httpx.HTTPStatusError):
                     data = {"status": "offline", "data": None}
 

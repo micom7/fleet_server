@@ -35,6 +35,10 @@ class Settings:
     base_url:      str  = os.getenv("BASE_URL", "http://localhost:8000")
     cookie_secure: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 
+    # ── Live WebSocket ────────────────────────────────────────────────
+    # Якщо найсвіжіший рядок даних старіший за цей поріг — status="stale"
+    live_stale_threshold_sec: float = float(os.getenv("LIVE_STALE_THRESHOLD_SEC", "3"))
+
     # ── SMTP ─────────────────────────────────────────────────────────
     smtp_host:     str = os.getenv("SMTP_HOST", "")
     smtp_port:     int = int(os.getenv("SMTP_PORT", "587"))

@@ -200,11 +200,17 @@ Fleet Server зберігає `software_version` у таблиці `vehicles` д
 
 **SQL на машині (реалізація):**
 ```sql
-SELECT DISTINCT ON (channel_id)
-    channel_id, value, time
-FROM measurements
-ORDER BY channel_id, time DESC;
+SELECT m.channel_id, m.value, m.time
+FROM channel_config cc
+CROSS JOIN LATERAL (
+    SELECT channel_id, value, time
+    FROM measurements
+    WHERE channel_id = cc.channel_id
+    ORDER BY time DESC
+    LIMIT 1
+) m;
 ```
+> Використовує `LATERAL` замість `DISTINCT ON` — 18 точкових index seeks замість повного scan таблиці. Час виконання O(k) де k = кількість каналів, не залежить від розміру `measurements`.
 
 ---
 

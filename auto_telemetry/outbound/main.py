@@ -159,10 +159,15 @@ def data_latest(_: None = AUTH):
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT DISTINCT ON (channel_id)
-                    channel_id, value, time
-                FROM measurements
-                ORDER BY channel_id, time DESC
+                SELECT m.channel_id, m.value, m.time
+                FROM channel_config cc
+                CROSS JOIN LATERAL (
+                    SELECT channel_id, value, time
+                    FROM measurements
+                    WHERE channel_id = cc.channel_id
+                    ORDER BY time DESC
+                    LIMIT 1
+                ) m
             """)
             rows = cur.fetchall()
     finally:
